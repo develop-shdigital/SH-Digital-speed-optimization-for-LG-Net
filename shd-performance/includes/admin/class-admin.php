@@ -545,7 +545,7 @@ final class Admin {
 		if ( isset( $input['delay_timeout'] ) ) {
 			$clean['delay_timeout'] = max( 0, min( 60, (int) $input['delay_timeout'] ) );
 		}
-		foreach ( array( 'tracking_patterns', 'delay_exclusions', 'keep_inline', 'consent_scripts' ) as $key ) {
+		foreach ( array( 'tracking_patterns', 'delay_exclusions', 'keep_inline', 'consent_scripts', 'async_scripts' ) as $key ) {
 			if ( isset( $input[ $key ] ) ) {
 				$clean[ $key ] = self::lines( $input[ $key ] );
 			}
@@ -562,6 +562,9 @@ final class Admin {
 		}
 		if ( isset( $input['youtube_label'] ) && is_string( $input['youtube_label'] ) ) {
 			$clean['youtube_label'] = sanitize_text_field( $input['youtube_label'] );
+		}
+		if ( isset( $input['brand_name'] ) && is_string( $input['brand_name'] ) ) {
+			$clean['brand_name'] = substr( sanitize_text_field( $input['brand_name'] ), 0, 60 );
 		}
 		if ( isset( $input['rum_sample'] ) ) {
 			$clean['rum_sample'] = max( 0, min( 100, (int) $input['rum_sample'] ) );
@@ -1172,15 +1175,17 @@ final class Admin {
 		echo '<tr><th scope="row"><label for="shd-toc-phones">' . esc_html__( 'Table of contents on phones', 'shd-performance' ) . '</label></th><td><select id="shd-toc-phones" name="shd[toc_phones]">';
 		printf( '<option value="expanded"%1$s>%2$s</option>', selected( $settings['toc_phones'], 'expanded', false ), esc_html__( 'Open, as designed', 'shd-performance' ) );
 		printf( '<option value="collapsed"%1$s>%2$s</option>', selected( $settings['toc_phones'], 'collapsed', false ), esc_html__( 'Collapsed, with a button to open it', 'shd-performance' ) );
-		echo '</select><p class="description">' . esc_html__( 'On posts with many headings the open table of contents fills the first screen on phones and pushes the featured image out of it. For first-time visitors the cookie banner then becomes the largest element, which PageSpeed counts as a slow LCP (about 4.5 s instead of 2–3 s; mobile score about 80 instead of 88–96 on the affected posts). “Collapsed” shows the heading with an arrow button that opens the list. Desktop is not affected.', 'shd-performance' ) . '</p></td></tr>';
+		echo '</select><p class="description">' . esc_html__( 'On articles with many headings the open table of contents can fill the first screen on phones and push the featured image out of it; for first-time visitors the cookie banner then becomes the largest element. “Collapsed” shows the heading with an arrow button that opens the list. Desktop is not affected.', 'shd-performance' ) . '</p></td></tr>';
 		$this->number_row( 'delay_timeout', __( 'Start delayed scripts after (seconds)', 'shd-performance' ), $settings['delay_timeout'], 0, 60, __( 'Delayed scripts start on the first interaction or after this time. 0 = only on interaction (visitors who leave without scrolling or tapping are then not counted by analytics).', 'shd-performance' ) );
 		$this->lines_row( 'tracking_patterns', __( 'Tracking scripts to delay', 'shd-performance' ), $settings['tracking_patterns'], __( 'One part of a script address per line.', 'shd-performance' ) );
 		$this->lines_row( 'delay_exclusions', __( 'Never delay', 'shd-performance' ), $settings['delay_exclusions'], __( 'Scripts whose address contains one of these lines always load normally.', 'shd-performance' ) );
-		$this->lines_row( 'consent_scripts', __( 'Cookie banner scripts', 'shd-performance' ), $settings['consent_scripts'], __( 'Downloaded early without blocking and started at the top of the page body; never delayed.', 'shd-performance' ) );
+		$this->lines_row( 'consent_scripts', __( 'Cookie banner scripts', 'shd-performance' ), $settings['consent_scripts'], __( 'Never delayed. Cookiez’s banner script runs as soon as the page has been read when scripts are deferred or delayed.', 'shd-performance' ) );
+		$this->lines_row( 'async_scripts', __( 'Third-party widgets to load async', 'shd-performance' ), $settings['async_scripts'], __( 'Scripts whose address contains one of these lines load without stopping the page (async), unless they are delayed.', 'shd-performance' ) );
 		$this->lines_row( 'keep_inline', __( 'Inline scripts to run immediately', 'shd-performance' ), $settings['keep_inline'], __( 'Inline scripts containing one of these texts are never deferred or delayed.', 'shd-performance' ) );
+		echo '<tr><th scope="row"><label for="shd-brand-name">' . esc_html__( 'Brand name', 'shd-performance' ) . '</label></th><td><input id="shd-brand-name" class="regular-text" type="text" name="shd[brand_name]" value="' . esc_attr( $settings['brand_name'] ) . '"><p class="description">' . esc_html__( 'Alternative text for a logo whose alt text is its file name. Empty = the company name from Yoast SEO, else the site title.', 'shd-performance' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="shd-youtube-label">' . esc_html__( 'Video play button label', 'shd-performance' ) . '</label></th><td><input id="shd-youtube-label" class="regular-text" type="text" name="shd[youtube_label]" value="' . esc_attr( $settings['youtube_label'] ) . '"><p class="description">' . esc_html__( 'Read by screen readers. Empty = “Video abspielen” on German sites, “Play video” otherwise.', 'shd-performance' ) . '</p></td></tr>';
 		$this->number_row( 'rum_sample', __( 'Web Vitals sample (%)', 'shd-performance' ), $settings['rum_sample'], 0, 100, __( 'Share of page views that report their Core Web Vitals.', 'shd-performance' ) );
-		$this->lines_row( 'redirect_domains', __( 'Old domains to check', 'shd-performance' ), $settings['redirect_domains'], __( 'Checked by the health checks: each should redirect to this site in one step.', 'shd-performance' ) );
+		$this->lines_row( 'redirect_domains', __( 'Other addresses', 'shd-performance' ), $settings['redirect_domains'], __( 'Other domains of this site (for example the domain without www, old domains). With “robots.txt and redirects of the other addresses” live, the web server sends them to the same page here in one step and robots.txt lists only this site’s sitemaps; the health checks test each one.', 'shd-performance' ) );
 		echo '</tbody></table></details>';
 
 		echo '<p class="submit"><button type="submit" class="button button-primary">' . esc_html__( 'Save changes', 'shd-performance' ) . '</button></p></form>';

@@ -253,6 +253,9 @@ final class Css_Combiner {
 		$css = '';
 		foreach ( $run as $item ) {
 			$chunk = (string) preg_replace( '/^\s*@charset\s+[^;]+;/i', '', $item['css'] );
+			// "/*# sourceURL=elementor-frontend-inline-css */" would name the whole joined file
+			// after one part in DevTools and Lighthouse; source maps do not fit a joined file.
+			$chunk = (string) preg_replace( '#/\*\#\s*source(?:Mapping)?URL=[^*]*\*/#', '', $chunk );
 			$chunk = self::font_display( $chunk );
 			if ( '' !== $item['media'] ) {
 				$chunk = '@media ' . $item['media'] . '{' . $chunk . "\n}";

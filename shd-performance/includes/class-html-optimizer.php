@@ -23,6 +23,9 @@ final class Html_Optimizer {
 	/** Attribute that marks tags to delete in finalize(). */
 	const REMOVE_MARK = 'data-shd-x';
 
+	/** Attribute that marks an inline script whose code becomes a deferred data: URL in finalize(). */
+	const DEFER_MARK = 'data-shd-defer';
+
 	/**
 	 * Characters of main-content text after which an element no longer counts as first
 	 * screen, even when the page is one large section (the hero texts here have 70 to 290
@@ -60,6 +63,7 @@ final class Html_Optimizer {
 	private $sh_motion      = false;
 	private $restore_ratio  = false;
 	private $consent_lang   = '';
+	private $has_blocks     = true;
 
 	/** @var string Language of the page (<html lang>), for names given to links and frames: de, en, fr, it. */
 	private $lang           = 'de';
@@ -118,6 +122,9 @@ final class Html_Optimizer {
 	private $needs_main     = false;
 	private $headings       = array();
 	private $in_home_link   = false;
+
+	/** @var string[] Code of inline scripts deferred as data: URLs (see DEFER_MARK). */
+	private $deferred_inline = array();
 
 	// Characters of main-content text seen so far.
 	private $text_now       = 0;
@@ -275,6 +282,7 @@ final class Html_Optimizer {
 			$this->skip_target = $skip[1];
 		}
 		$this->restore_ratio = ! empty( $this->on['image_dimensions'] ) && self::ratio_switched_off( $html );
+		$this->has_blocks    = self::has_block_markup( $html );
 		$this->recaptcha_ok = false !== strpos( $html, 'elementor-g-recaptcha' )
 			&& false === stripos( $html, 'wpcf7' )
 			&& false === stripos( $html, 'gform_' )
@@ -1481,6 +1489,21 @@ final class Html_Optimizer {
 	}
 
 	/**
+	 * Whether the page shows anything the block library styles: block elements (wp-block-…),
+	 * block supports (layout, colours, font sizes, text alignment, styles) or alignments.
+	 * Classes in <head> (none there are block markup) and scripts are ignored.
+	 *
+	 * @param string $html Document.
+	 * @return bool
+	 */
+	public static function has_block_markup( $html ) {
+		$at   = stripos( $html, '<body' );
+		$body = false === $at ? $html : substr( $html, $at );
+		$body = (string) preg_replace( '#<(script|style|template)\b[^>]*>.*?</\1\s*>#is', '', $body );
+		return (bool) preg_match( '/\bclass\s*=\s*["\'][^"\']*(?<![\w-])(?:wp-block-|is-layout-|wp-container-|wp-element-|has-text-align-|has-text-color|has-background|has-link-color|has-[\w-]+-(?:color|font-size|background-color|gradient-background|font-family)|is-style-|wp-lightbox|wp-embed-aspect-|align(?:wide|full|center|left|right|none)(?![\w-]))/i', $body );
+	}
+
+	/**
 	 * Whether the page's CSS turns off the width/height placeholder of images with an
 	 * !important rule (img { aspect-ratio: unset !important }), and no other !important
 	 * aspect-ratio rule exists that a restored placeholder could override.
@@ -1638,6 +1661,12 @@ final class Html_Optimizer {
 		// Elementor's animation stylesheets (e-animation-*) stay: the off-canvas menu uses
 		// fadeInDown when it opens, and they are a few hundred bytes.
 
+		if ( ! empty( $this->on['block_css'] ) && ! $this->has_blocks && 'wp-block-library-css' === (string) $p->get_attribute( 'id' ) ) {
+			$this->remove_link( $p );
+			$this->count( 'block_css_removed' );
+			return;
+		}
+
 		if ( ! empty( $this->on['google_fonts'] ) && preg_match( '#^(?:https?:)?//fonts\.googleapis\.com/css2?\?#i', trim( html_entity_decode( $href, ENT_QUOTES ) ) ) ) {
 			$local = Google_Fonts::local_url( html_entity_decode( $href, ENT_QUOTES ) );
 			if ( null !== $local ) {
@@ -1736,10 +1765,16 @@ final class Html_Optimizer {
 		if ( self::matches( $src, (array) $this->s['consent_scripts'] ) ) {
 			// Never delayed. Cookiez's banner.js waits for the window "load" event (every image,
 			// font and script) when it runs while the page is still being read; deferred, it runs
-			// when reading has finished and draws the banner at once.
-			if ( ! empty( $this->on['cookie_banner'] ) && preg_match( '#/cookiez/assets/build/banner(?:\.min)?\.js(?:[?\#]|$)#i', $src ) && null === $p->get_attribute( 'async' ) && null === $p->get_attribute( 'defer' ) ) {
+			// when reading has finished and draws the banner at once. Only together with deferred
+			// or delayed scripts: then the banner is drawn before them. On its own, an earlier
+			// banner became the largest element of pages like /kontakt/ (its text is about as large
+			// as the photo) while all scripts still ran before it, which Lighthouse counts.
+			$banner = preg_match( '#/cookiez/assets/build/banner(?:\.min)?\.js(?:[?\#]|$)#i', $src );
+			if ( $banner && ! empty( $this->on['cookie_banner'] ) && ( ! empty( $this->on['defer_scripts'] ) || ! empty( $this->on['delay_all_scripts'] ) ) && null === $p->get_attribute( 'async' ) && null === $p->get_attribute( 'defer' ) ) {
 				$p->set_attribute( 'defer', true );
 				$this->count( 'cookie_banner' );
+			}
+			if ( $banner && ! empty( $this->on['cookie_banner'] ) ) {
 				$this->consent_preloads = array_filter(
 					array(
 						'script' => Consent::language_file( $src, $this->consent_lang ),
@@ -1813,7 +1848,11 @@ final class Html_Optimizer {
 		}
 
 		if ( ! empty( $this->on['defer_scripts'] ) && $this->can_defer_inline && $this->any_deferred ) {
-			$p->set_attribute( 'src', 'data:text/javascript;base64,' . base64_encode( $code ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- keeps inline scripts in defer order.
+			// The tag processor passes src through esc_url(), which refuses data: URLs (WordPress
+			// 7.1 returns false and keeps the old value); the data: URL is written in finalize().
+			$n                           = count( $this->deferred_inline );
+			$this->deferred_inline[ $n ] = $code;
+			$p->set_attribute( self::DEFER_MARK, (string) $n );
 			$p->set_attribute( 'defer', true );
 			$p->set_modifiable_text( '' );
 			$this->count( 'deferred_inline' );
@@ -1943,6 +1982,7 @@ final class Html_Optimizer {
 		$html = $this->insert_facades( $html );
 		$html = $this->insert_iframe_facades( $html );
 
+		$html = $this->write_deferred_inline( $html );
 		$html = preg_replace( '/<script\b[^>]*\b' . self::REMOVE_MARK . '\b[^>]*>\s*<\/script>[ \t]*\n?/i', '', $html );
 		$html = preg_replace( '/<link\b[^>]*\b' . self::REMOVE_MARK . '\b[^>]*>[ \t]*\n?/i', '', $html );
 		$html = $this->google_preconnects( $html );
@@ -1983,9 +2023,12 @@ final class Html_Optimizer {
 			return $html;
 		}
 		$tag = $m[0][0];
-		// Deferred like motion.js, so it runs right before it; otherwise during reading, where its
+		// Started on the first interaction like motion.js (right before it, so it marks what is on
+		// screen then); deferred like motion.js; otherwise during reading, where its
 		// DOMContentLoaded listener comes before the one motion.js adds.
-		if ( preg_match( '#\sdefer(?:[\s=>/])#i', $tag ) && $this->can_defer_inline ) {
+		if ( false !== stripos( $tag, 'shd/delayed' ) ) {
+			$script = '<script id="shd-perf-motion" type="shd/delayed">' . $code . '</script>';
+		} elseif ( preg_match( '#\sdefer(?:[\s=>/])#i', $tag ) && $this->can_defer_inline ) {
 			$script = '<script id="shd-perf-motion" defer src="data:text/javascript;base64,' . base64_encode( $code ) . '"></script>'; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- keeps the order of deferred scripts.
 		} else {
 			$script = '<script id="shd-perf-motion">' . $code . '</script>';
@@ -2021,6 +2064,37 @@ final class Html_Optimizer {
 		);
 		if ( $count > 0 ) {
 			$this->count( 'hero_steady', $count );
+		}
+		return $html;
+	}
+
+	/**
+	 * Deferred inline scripts get their code back as a data: URL, so they run in their place
+	 * among the deferred scripts.
+	 *
+	 * @param string $html Document.
+	 * @return string
+	 */
+	private function write_deferred_inline( $html ) {
+		if ( empty( $this->deferred_inline ) ) {
+			return $html;
+		}
+		$written = 0;
+		$html    = (string) preg_replace_callback(
+			'#<script\b([^>]*?)\s' . self::DEFER_MARK . '="(\d+)"([^>]*)>#i',
+			function ( $m ) use ( &$written ) {
+				$n = (int) $m[2];
+				if ( ! isset( $this->deferred_inline[ $n ] ) ) {
+					return $m[0];
+				}
+				++$written;
+				return '<script' . $m[1] . ' src="data:text/javascript;base64,' . base64_encode( $this->deferred_inline[ $n ] ) . '"' . $m[3] . '>'; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- keeps inline scripts in defer order.
+			},
+			$html
+		);
+		if ( $written !== count( $this->deferred_inline ) ) {
+			// Should not happen; a marker without its code would leave an empty deferred script.
+			$this->count( 'deferred_inline_missing', count( $this->deferred_inline ) - $written );
 		}
 		return $html;
 	}

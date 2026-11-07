@@ -27,9 +27,21 @@
 
 	// Browsers also send mousemove when content moves under a resting pointer
 	// (during loading, for example); only a real movement counts as interaction.
+	// Focus moved by a script is no interaction either: the cookie banner (Cookiez,
+	// #cookiez-banner) traps focus in its dialog as soon as it opens, which started
+	// every delayed script right away. A visitor's own focus follows a key press or a
+	// tap, which already counts; without that, focus counts only where the browser
+	// cannot tell (no User Activation API) and outside the banner.
 	function trigger( event ) {
 		if ( 'mousemove' === event.type && ! event.movementX && ! event.movementY ) {
 			return;
+		}
+		if ( 'focusin' === event.type ) {
+			var activation = w.navigator && w.navigator.userActivation;
+			var target = event.target;
+			if ( ( activation && ! activation.hasBeenActive ) || ( target && target.closest && target.closest( '#cookiez-banner' ) ) ) {
+				return;
+			}
 		}
 		start();
 	}

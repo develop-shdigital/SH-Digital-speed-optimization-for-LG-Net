@@ -112,7 +112,7 @@ final class Settings {
 				'default' => 'live',
 				'risk'    => 'low',
 				'title'   => __( 'Show the cookie banner as soon as the page has been read', 'shd-performance' ),
-				'fixes'   => __( 'Cookiez, the cookie banner, waits for the browser’s “load” event, that is until every image, font and script of the page has arrived, then downloads its texts and draws the banner. The banner covers half of a phone screen, so its text is the largest element of most pages, and Google measures the page as loaded only when it appears (Largest Contentful Paint up to 4.1 s on phones in Lighthouse). Its script now runs as soon as the page has been read (defer), which Cookiez treats like a page that has finished loading, and its language file is downloaded together with the page. Consent, texts and design are unchanged; the banner script is never delayed until an interaction.', 'shd-performance' ),
+				'fixes'   => __( 'Cookiez, the cookie banner, waits for the browser’s “load” event, that is until every image, font and script of the page has arrived, then downloads its texts and draws the banner. The banner covers half of a phone screen, so its text is the largest element of most pages, and Google measures the page as loaded only when it appears (Largest Contentful Paint up to 4.1 s on phones in Lighthouse). Its language file is now downloaded together with the page. As soon as “Stop JavaScript from blocking the first paint” or “Start all non-essential JavaScript on the first interaction” is active too, the banner script runs when the page has been read (defer), before the other scripts, which Cookiez treats like a page that has finished loading (Largest Contentful Paint about 2 s instead of 4 s on phones in Lighthouse). On its own that would not help: the scripts would still run first, and on pages like /kontakt/ the earlier banner would replace the photo as the largest element. Consent, texts and design are unchanged; the banner script is never delayed until an interaction.', 'shd-performance' ),
 			),
 			'async_widgets'       => array(
 				'group'   => 'third-party',
@@ -148,6 +148,13 @@ final class Settings {
 				'risk'    => 'low',
 				'title'   => __( 'Load the page’s stylesheets as one file', 'shd-performance' ),
 				'fixes'   => __( 'WordPress links every plugin’s and every Elementor widget’s stylesheet separately, and nothing appears until all of them have arrived: 17 to 19 files per page here, plus 100 to 235 KB of CSS that Elementor writes into each page. They are joined, with the inline styles between them, in exactly the same order into one cached file, so the page looks the same. Stylesheets that could behave differently when joined stay separate (other sites, print styles, @import, Elementor’s Swiper, lightbox and dialog styles, which Elementor loads itself).', 'shd-performance' ),
+			),
+			'block_css'           => array(
+				'group'   => 'css',
+				'default' => 'live',
+				'risk'    => 'low',
+				'title'   => __( 'Leave out WordPress’s block styles on pages without blocks', 'shd-performance' ),
+				'fixes'   => __( 'WordPress links its block library stylesheet (141 KB, one of the files the browser waits for before it paints anything) when a page’s content contains blocks, even if Elementor shows that page and no block appears on it: /tv/ loads it this way. It is now left out on pages whose HTML has no block markup at all (no wp-block-… element, no block layout, colour, font-size or alignment classes); pages with blocks keep it.', 'shd-performance' ),
 			),
 			'fonts'               => array(
 				'group'   => 'fonts',

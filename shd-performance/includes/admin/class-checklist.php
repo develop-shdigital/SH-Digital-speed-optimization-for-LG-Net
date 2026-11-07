@@ -203,9 +203,10 @@ final class Checklist {
 				'id'    => 'cookie-banner',
 				'group' => __( 'Third parties', 'shd-performance' ),
 				'title' => __( 'Cookie banner: shown as soon as the page has been read', 'shd-performance' ),
-				'why'   => __( 'Cookiez waits for every image, font and script before it draws the banner, and the banner is the largest element of most pages on phones, so Google measured the pages as loaded only then. “Show the cookie banner as soon as the page has been read” starts it right after the page has been read and loads its texts with the page. The remaining time is the JavaScript that runs before it: see the first task.', 'shd-performance' ),
+				'why'   => __( 'Cookiez waits for every image, font and script before it draws the banner, and the banner is the largest element of most pages on phones, so Google measured the pages as loaded only then. “Show the cookie banner as soon as the page has been read” loads its texts with the page and, together with the deferred or delayed scripts of the first task, draws it before those scripts (Largest Contentful Paint about 2 s instead of 4 s on phones in Lighthouse).', 'shd-performance' ),
 				'steps' => array(
-					__( 'Nothing to do while the feature is live. Optional design decision: Cookiez’s layout setting with a smaller box on phones (instead of the bar over half the screen) would make the page’s own content the largest element again.', 'shd-performance' ),
+					__( 'Do the first task (Test features to Live). Nothing else to do while the feature is live.', 'shd-performance' ),
+					__( 'Optional design decision: a smaller banner box on phones (Cookiez’s layout setting, instead of the bar over half the screen) would make the page’s own content the largest element again.', 'shd-performance' ),
 				),
 				'auto'  => array( __CLASS__, 'auto_cookie_banner' ),
 			),
@@ -497,10 +498,17 @@ final class Checklist {
 				'note'   => __( 'Cookiez is not active.', 'shd-performance' ),
 			);
 		}
-		$live = 'live' === Settings::state( 'cookie_banner' );
+		$live    = 'live' === Settings::state( 'cookie_banner' );
+		$scripts = 'live' === Settings::state( 'defer_scripts' ) || 'live' === Settings::state( 'delay_all_scripts' );
+		if ( ! $live ) {
+			return array(
+				'status' => 'open',
+				'note'   => __( '“Show the cookie banner as soon as the page has been read” is not live (Optimizations tab).', 'shd-performance' ),
+			);
+		}
 		return array(
-			'status' => $live ? 'done' : 'open',
-			'note'   => $live ? __( 'Done automatically: the banner starts as soon as the page has been read.', 'shd-performance' ) : __( '“Show the cookie banner as soon as the page has been read” is not live (Optimizations tab).', 'shd-performance' ),
+			'status' => $scripts ? 'done' : 'open',
+			'note'   => $scripts ? __( 'Done automatically: the banner starts as soon as the page has been read, before the other scripts.', 'shd-performance' ) : __( 'Its texts load with the page; it starts earlier once the deferred or delayed scripts are live (first task).', 'shd-performance' ),
 		);
 	}
 

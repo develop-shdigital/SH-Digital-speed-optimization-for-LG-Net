@@ -4,51 +4,53 @@ Tags: performance, core web vitals, elementor, pagespeed
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.5.2
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Speed and Core Web Vitals optimizations and a page cache for the SH Digital Elementor site, with a dashboard checklist for the steps that need a person.
+Speed and Core Web Vitals optimizations and a page cache for the LGnet Elementor site, with a dashboard checklist for the steps that need a person.
 
 == Description ==
 
 SHD Performance rewrites the finished HTML of each front-end page (after Elementor and all plugins have run) and stores it in its own page cache. Nothing in Elementor, the content or other plugins is changed, so turning a feature off or deactivating the plugin restores the original behaviour immediately.
 
-Automatic optimizations (each one can be Off, Test or Live):
+Automatic optimizations for the LGnet site (each one can be Off, Test or Live):
 
-* Content is shown immediately instead of waiting for Elementor's entrance animations.
+* The cookie banner (Cookiez) loads its language file with the page and, together with the deferred or delayed scripts, starts as soon as the page has been read instead of after every image, font and script.
+* Ally's accessibility widget loads without stopping the page (async).
+* Work Sans, which HTML widgets load from fonts.googleapis.com, is served from the site; visitors no longer contact Google.
+* Images keep their space while they load, although the site's custom CSS switches the width/height placeholder off (img { aspect-ratio: unset !important; }); loaded images are sized exactly as before.
+* The homepage hero slider no longer jumps by 72 px on phones while it measures the header.
+* SH Motion leaves what is on screen at load still (header, first screen); everything further down still fades in.
 * The main image of each page is prioritized; the header logo no longer competes with it.
-* Lazy-loaded images download at the size they are shown (sizes="auto"); images get dimensions so the layout does not jump.
-* Click-to-play previews replace Elementor's YouTube players until someone presses play.
-* Autoplaying videos further down the page download when a visitor scrolls near them, not with the page.
-* reCAPTCHA loads when a visitor starts using a form.
-* Tracking scripts start after the first interaction; the cookie banner no longer blocks the first paint.
-* JavaScript is deferred, or started on the first interaction, with taps and form submits replayed.
-* Unused Qi Addons / LA-Studio Kit files, the emoji script, duplicate scripts and (optionally) jQuery Migrate are removed.
-* Fonts: font-display: swap, uploaded WOFF2 files, preloads and a size-matched fallback font.
-* The blog's table of contents is filled in from the start, so it no longer pushes the article down.
+* All stylesheets of a page, with Elementor's inline CSS, are joined in the same order into one cached file; WordPress's block library stylesheet (141 KB) is left out on pages without blocks.
+* Size-matched fallbacks for Archivo, Public Sans and Work Sans, so text barely moves when the font arrives.
+* Lazy-loaded images download at the size they are shown (sizes="auto"); post-card backgrounds and sections further down load when they come into view.
+* The articles' table of contents is filled in from the start.
+* Icon-only links get a name in the language of the page (German, English, French, Italian); the logo's file-name alt text becomes “LGnet”.
+* Browser cache lifetimes for CSS, JavaScript, fonts (a year) and images (30 days), written to .htaccess and checked.
+* Test (check in the Test view first): JavaScript deferred or started on the first interaction, jQuery Migrate removed.
+* Ready for later additions: tracking scripts start after the first interaction, YouTube click-to-play, reCAPTCHA on demand, lazy iframes and videos.
 * Real-visitor Core Web Vitals (LCP, INP, CLS, FCP, TTFB) are measured without cookies. Automated browsers, such as PageSpeed Insights' test runs, are not counted.
-* Icon-only links (menu button, its close button, back-to-top arrow) and links that contain only an image get a name in the site's language; Elementor Pro's loop grid and carousel get correct list roles. Fixes Lighthouse's "Agentic browsing" accessibility check.
-* Requests for an AI resource catalogue the site does not publish (/.well-known/ard.json, /.well-known/ai-catalog.json) get a short 404 at once, so Lighthouse counts the check as not applicable instead of failed.
 
-Page cache (replaces Kadence Performance):
+Page cache:
 
-* Finished pages are stored as files and sent by Apache through .htaccess rules (or by wp-content/advanced-cache.php) without starting WordPress.
-* One copy for phones and computers; every public page is cached again in the background after a change.
+* Finished pages are stored as files and sent by Apache through .htaccess rules (or by wp-content/advanced-cache.php) without starting WordPress: a few milliseconds instead of 0.8–1.8 s.
+* One copy for phones and computers; every public page and every language version (/en/, /fr/, /it/) is cached again in the background after a change.
 * Cleared when content changes, including Elementor saves (pages, templates, site settings) and Elementor's "Clear Files & Data". Works together with Elementor's Element Cache.
 * Logged-in users, form submissions, password-protected posts, searches and addresses with parameters always get a fresh page. Ad and campaign links can optionally get the cached page.
-* Waits while Kadence Performance (or another page cache plugin) is active, and takes over when it is deactivated.
-* Brotli: if Apache has its Brotli module, it is switched on for text files; stored pages use the server's Brotli once a daily check confirms it, and the stored gzip copies otherwise.
+* Waits while another page cache plugin is active.
+* Brotli: if Apache has its Brotli module, it is switched on for text files.
 
 Images tab: replace the file of an image once and every page, template, header, footer and setting that uses it shows the new file. "Make lighter" turns the current file into a WebP file with the same dimensions (compare before using it); or upload your own file. The image keeps its ID, title and alt text, Elementor's CSS and the page cache are cleared, and each replacement can be undone until the old files are deleted.
 
-The dashboard (SHD Performance in the admin menu) also contains health checks, a page scan, a measurement of where the server spends the time to build a page (per plugin, Elementor widget, shortcode, database query and request to other servers), and a step-by-step checklist for everything that has to be changed by hand: cache settings, server, fonts, plugins, images, tracking, accessibility and domain set-up.
+The dashboard (SHD Performance in the admin menu) also contains health checks, a page scan, a measurement of where the server spends the time to build a page (per plugin, Elementor widget, shortcode, database query and request to other servers), and a step-by-step checklist for everything that has to be changed by hand.
 
 == Installation ==
 
-1. Plugins → Add New → Upload Plugin, choose the zip, activate.
-2. Deactivate Kadence Performance. SHD Performance installs its page cache at once (check SHD Performance → Page cache).
-3. Open SHD Performance → Overview. Live features are already active for visitors; Test features apply only in the Test view.
+1. Plugins → Add New → Upload Plugin, choose the zip, activate. (An update: “Replace current with uploaded”.)
+2. Open SHD Performance → Page cache: the status should be “Active”. Every page is cached in the background within a few minutes.
+3. Live features are already active for visitors; Test features apply only in the Test view.
 4. Check the Test view (admin bar or the secret preview link), then switch the Test features to Live on the Optimizations tab.
 5. Work through the Checklist tab.
 
@@ -76,56 +78,22 @@ No. Each page view may send one anonymous beacon with the metric values, the pag
 
 == Changelog ==
 
-= 1.5.2 =
-* Iframes from other sites start on the visitor's first scroll, tap, key press or mouse movement (or after the delayed scripts' timeout, 10 s without any interaction) and then load when they are within half a screen. The chart app right under the heading of /industrie-case-study/ started with the page and its own tag manager, Google tags, TikTok pixel and reCAPTCHA cost 630 ms of Total Blocking Time on phones and 440 ms on computers.
-* Accessibility (setting renamed “Accessibility: link names, list roles, skip link, heading levels, logo text”): the main content gets the id the “Skip to content” link points to and, without a <main>, the main landmark; headings that skip levels keep their tag and look and get the right level for screen readers (aria-level); a logo whose alternative text is its file name gets the site's name (Yoast SEO); iframes without a title get one. Lighthouse accessibility 89–93 → 97 on the tested pages.
-* New setting “robots.txt and redirects of the other addresses” (Live): sitemap lines of the site's other addresses are removed from robots.txt (the old file is kept in uploads/shd-performance/backup), and other addresses that reach the server (sh-digital.ch, the old domains) are redirected by Apache in one step, before WordPress starts (pages only: form posts, the REST API, AJAX, cron and /.well-known/ are left alone). The rules are checked right after writing and removed again if the site does not answer; deactivating the plugin removes them.
-* Checklist: the accessibility, robots.txt and redirect tasks show their status automatically; the redirect task names the one step left at Hostpoint.
+= 1.6.0 =
+* Adapted to the LGnet site (lgnet-wordpress.shdigital.ch), based on SHD Performance 1.5.2 of sh-digital.ch.
+* New: the cookie banner (Cookiez) gets its language file with the page (for visitors without a stored choice) and, together with deferred or delayed scripts, starts when the page has been read.
+* New: WordPress's block library stylesheet is left out on pages without block markup (/tv/: 141 KB).
+* Fixed: inline scripts deferred by “Stop JavaScript from blocking the first paint” lost their code on WordPress 7.1 (the tag processor refuses data: URLs); they are now written in the final pass, and the fixture test checks for it.
+* Fixed: delayed scripts started as soon as the cookie banner moved the focus into its dialog; only a visitor's own focus counts now.
+* New: Ally's accessibility widget loads async; Google Fonts in HTML widgets are served from the site.
+* New: image placeholders while loading despite img { aspect-ratio: unset !important; } in the site CSS (layout shift 0.21 → 0 on /mobile-abo-vergleich/ on computers in Lighthouse).
+* New: the LGnet Hero Slider no longer jumps on phones (three layout shifts of 0.09 each on the homepage).
+* New: SH Motion keeps the elements that are on screen at load still.
+* New: language versions found in stored pages (hreflang) are preloaded into the page cache; link and frame names follow the language of the page.
+* New: browser cache lifetimes for static files (.htaccess, verified, removed again if the site does not answer), with a health check.
+* New: size-matched fallbacks for Archivo, Public Sans and Work Sans; fonts are detected by themselves; font preloads are off by default.
+* Elementor's animation stylesheets are kept (the off-canvas menu uses fadeInDown).
+* Server rules: no www twin is added on subdomains; the block is now called “SHD Server Rules”.
+* Removed the parts written for sh-digital.ch: IcoFont drawings, cursor script, Qi Addons / LA-Studio Kit unloading, CookieFirst and SHD Consent handling.
+* Checklist rewritten for LGnet; the page scan finds custom CSS written as “{selector} img { … }”.
 
-= 1.5.1 =
-* The six IcoFont icons of the site (the delivery truck on /seo-spezialisten/ and the five check marks on /geo-agentur/) are drawn as inline SVG: SH Digital’s own drawings on the font’s grid, so their size, place and colours stay the same. When no other IcoFont icon is on a page, the IcoFont stylesheet (92 KB) is left out and its font (525 KB) is never downloaded. New setting “Draw the IcoFont icons as SVG” (Live).
-* Checklist: the IcoFont task is done automatically; the cookie banner task says when SHD Consent stops a CookieFirst script that something else still adds.
-
-= 1.5.0 =
-* One stylesheet instead of many: the render-blocking stylesheets in <head> and the inline styles between them are joined, in the same order, into one cached file (22 to 33 files per page before; PageSpeed Insights showed the last one arriving up to 1.5 s after the page). Stylesheets that could behave differently when joined stay separate. Fonts without font-display (IcoFont) get font-display: swap. Checked on 10 pages on phones and computers: same CSS rules, same layout, pixel-identical screenshots.
-* Background images of the first sections are preloaded from the top of the page with high priority. The browser otherwise finds them only after downloading the stylesheet that names them; they were the largest element on most pages and started about 2 s late on phones. The image of each element is read from Elementor's CSS for phones and computers separately, including blog cards and the image overlay of the video widget.
-* Phones and computers are handled separately: a section shown only on phones counts as their first screen, its main image is preloaded for phones only, and a desktop-only image is not downloaded on phones (it is preloaded for computers). Images far down a page that is one large section no longer get high priority.
-* Image preloads for files the page does not show are removed (/kontakt/ preloaded an unused copy of its hero image with high priority).
-* YouTube previews use copies of the thumbnail on this site: WebP in four widths (480–1280 px), cached for 30 days, no connection to YouTube's image server. Phones download about 60 KB instead of the 176 KB JPEG. A video in the first screen gets high priority as the main image.
-* Iframes from other sites (an embedded app, a map, a form) start loading when they come within half a screen of the viewport (at once if they are already on screen; loading="eager" is respected). The case-study chart app loaded with the page, with its own tag manager and reCAPTCHA (550 ms of blocked main thread on phones).
-* Carousels with lazy background images: only the slides in view load with the page; the others follow after the page has loaded or on the first tap (a testimonial carousel loaded 1.2 MB during page load).
-* Checklist: the cookie banner task explains its effect on each page (largest element on /impressum/ and /firmenverzeichnis/, last thing to appear everywhere); the image task names the heaviest main images; a new task replaces the six IcoFont icons (a 526 KB font).
-
-= 1.4.2 =
-* Works with SHD Consent (the own cookie banner): its scripts are never delayed or deferred, and the checklist task about the cookie banner recommends it and turns green once it shows the banner.
-
-= 1.4.1 =
-* Text compression check: tests a static file instead of the homepage (which comes from the page cache's own gzip copies, so it always showed gzip), and shows the server software and whether HTTP/3 is offered.
-* Brotli: if Apache has its Brotli module, the page cache's .htaccess block switches it on for text files. Browsers that accept Brotli no longer get gzip, which the server would otherwise always choose first. Stored pages use the server's Brotli once a check shows that it really compresses them (with the health checks and daily); otherwise the stored gzip copies are sent. Setting: Page cache tab → Brotli.
-* Checklist: the Brotli and HTTP/3 task is optional and under "Caching and server", with steps for Apache, for nginx in front of Apache, and for HTTP/3, which Apache cannot do.
-
-= 1.4.0 =
-* Images tab and "Replace file" in the Media Library: make an image lighter (WebP with the same dimensions, side-by-side comparison, quality 80–95) or upload a new file; every page, Elementor document, template, setting and term that links to the old files is switched to the new ones. Undo, and deleting the old files once nothing links to them.
-* Lighthouse "Agentic browsing": icon-only links and image-only links get a name (in German on a German site: "Menü öffnen", "Menü schliessen", "Nach oben", phone numbers, e-mail addresses, social networks, page titles); links with text are never renamed. Elementor Pro's loop grid items become list items and the loop carousel loses its wrong list role.
-* /.well-known/ard.json and /.well-known/ai-catalog.json get a short 404 at once instead of the 2-second 404 page, so the catalogue check no longer fails with "could not be loaded".
-* Checklist: the image task uses the Images tab; new task for four images that push the page down while loading (layout shift up to 0.38 on /seo-spezialisten/), with the exact Elementor settings; the accessibility task notes what is now automatic.
-
-= 1.3.0 =
-* Autoplaying self-hosted videos below the first screen (Elementor Video widget) download when a visitor scrolls near them instead of with the page. Their box keeps its size, so nothing moves. New feature "Start autoplaying videos further down when they come into view" (Live).
-* Checklist: the autoplaying-video task names the page, section and file and checks Mute and Play On Mobile, without which browsers block the autoplay (iPhones also need Play On Mobile). It turns green after "Scan pages" once both are on. Tools shows which videos wait until they come into view.
-* Web Vitals: automated browsers (navigator.webdriver: test tools and PageSpeed Insights' lab runs) are no longer measured. A one-time clean-up removes the samples recorded for /google-ads-agentur/ on 30 October 2026 between 14:02 and 14:12 UTC, which came from an automated test.
-
-= 1.2.1 =
-* Build-time report: [elementor-element] (the placeholder of Elementor's Element Cache for widgets it builds again on every visit) is explained with the widgets instead of being listed as a shortcode.
-
-= 1.2.0 =
-* Tools → "Where the build time goes": builds one page as a first-time visitor and shows the time per plugin, Elementor widget and shortcode, the database queries, requests to other servers and what to do about the biggest items. Only the measured request is affected.
-* The checklist task about slow uncached pages uses the measurement and is optional now that the page cache serves visitors.
-
-= 1.1.0 =
-* Page cache that replaces Kadence Performance: .htaccess delivery on Apache, advanced-cache.php elsewhere, background preload, automatic clearing (including Elementor saves and "Clear Files & Data"), optional caching of ad and campaign links.
-* New Page cache tab, health check and checklist task for the switch from Kadence Performance.
-* Rewritten CSS copies that are still in use are no longer removed by the daily clean-up.
-
-= 1.0.0 =
-* First release.
+Earlier versions (1.0.0–1.5.2, sh-digital.ch): see the changelog in the SH-Digital-speed-optimization repository.

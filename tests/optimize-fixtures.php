@@ -14,7 +14,7 @@
  * no element still hidden by an entrance animation, every facade placed (only
  * YouTube iframes may disappear, each replaced by a facade), every table of
  * contents item filled in names a heading of the page, the cookie banner script
- * deferred and never delayed, image placeholders only on images with numeric
+ * never delayed and deferred exactly when scripts are deferred or delayed, image placeholders only on images with numeric
  * dimensions and with "auto" (the file's own proportions win once loaded), no
  * Google Fonts preconnect removed while a Google stylesheet is still linked, and
  * that the result still parses as a full HTML document.
@@ -182,6 +182,22 @@ foreach ( $files as $file ) {
 	if ( false !== strpos( $result, Html_Optimizer::REMOVE_MARK ) ) {
 		$problems[] = 'removal marker left behind';
 	}
+	// A deferred inline script keeps its code as a data: URL (WordPress's tag processor refuses
+	// to write data: URLs itself); an empty deferred script means the code was lost.
+	if ( false !== strpos( $result, Html_Optimizer::DEFER_MARK . '=' ) ) {
+		$problems[] = 'defer marker left behind';
+	}
+	if ( preg_match( '#<script\b(?![^>]*\ssrc=)(?![^>]*\stype=)[^>]*\sdefer\b[^>]*>\s*</script>#i', $result ) ) {
+		$problems[] = 'deferred inline script without code';
+	}
+	if ( preg_match_all( '#<script\b[^>]*\ssrc="data:text/javascript;base64,([^"]*)"#i', $result, $data_scripts ) ) {
+		foreach ( $data_scripts[1] as $encoded ) {
+			if ( '' === trim( (string) base64_decode( $encoded, true ) ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+				$problems[] = 'empty data: script';
+				break;
+			}
+		}
+	}
 	if ( ! empty( $features['animations'] ) && 'all' === $settings['animation_mode'] && false !== strpos( $result, 'elementor-invisible' ) ) {
 		$problems[] = 'elementor-invisible left';
 	}
@@ -206,8 +222,9 @@ foreach ( $files as $file ) {
 		if ( false !== strpos( $banner[0], 'shd/delayed' ) ) {
 			$problems[] = 'cookie banner delayed';
 		}
-		if ( ! empty( $features['cookie_banner'] ) && ! preg_match( '#\sdefer(?:[\s=>])#i', $banner[0] ) ) {
-			$problems[] = 'cookie banner not deferred';
+		$early = ! empty( $features['cookie_banner'] ) && ( ! empty( $features['defer_scripts'] ) || ! empty( $features['delay_all_scripts'] ) );
+		if ( $early !== (bool) preg_match( '#\sdefer(?:[\s=>])#i', $banner[0] ) ) {
+			$problems[] = $early ? 'cookie banner not deferred' : 'cookie banner deferred without deferred or delayed scripts';
 		}
 	}
 	// The banner reads window.wp.i18n when it starts: its libraries must not wait for an interaction.

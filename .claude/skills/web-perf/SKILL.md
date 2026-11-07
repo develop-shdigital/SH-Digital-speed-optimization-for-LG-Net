@@ -9,16 +9,15 @@ Audit web page performance using Chrome DevTools MCP tools. This skill focuses o
 
 ## FIRST: Verify MCP Tools Available
 
-**Run this before starting.** Try calling `navigate_page` or `performance_start_trace`. If unavailable, STOP—the chrome-devtools MCP server isn't configured.
+**Run this before starting.** Try calling `navigate_page` or `performance_start_trace`. If unavailable, the chrome-devtools MCP server isn't connected to this session. Do not stop: use the script client in this repository, which runs the same tools (trace, every insight, LCP element, network list, accessibility snapshot, console errors) and saves each result to `tools/perf-lab/work/devtools/`:
 
-Ask the user to add this to their MCP config:
-
-```json
-"chrome-devtools": {
-  "type": "local",
-  "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
-}
+```bash
+cd tools/perf-lab && npm ci
+node devtools/audit.mjs <url> mobile
+node devtools/audit.mjs <url> desktop
 ```
+
+The repository's `.mcp.json` configures the server (pinned to `chrome-devtools-mcp@1.12.0`, headless, the pre-installed Chromium); approve it when Claude Code asks. Opening a live page counts as a visit in its analytics: for before/after experiments use the local replay and Lighthouse (`tools/perf-lab/README.md`).
 
 ## Key Guidelines
 

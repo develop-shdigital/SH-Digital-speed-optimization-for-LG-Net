@@ -33,6 +33,7 @@ connected to the session. It opens the real page: analytics on that page count a
 SITE=https://www.example.ch bash replay/make-cert.sh
 SITE=https://www.example.ch LOCAL_MAP='[["/wp-content/plugins/shd-performance/","/abs/repo/shd-performance/"]]' node replay/server.mjs
 PAGE=/abs/saved/page.html SITE=https://www.example.ch node lighthouse/run.mjs /page-path/ work/lh/page-mobile.json mobile performance,accessibility
+SITE=https://www.example.ch bash lighthouse/batch.sh work/lh/base 2 /=/abs/home.html /kontakt/=/abs/kontakt.html
 SITE=https://www.example.ch node browser/scroll-check.cjs /page-path/ mobile
 ```
 
@@ -42,12 +43,21 @@ replay: every other host is blocked, the REST API and all non-GET requests are a
 locally. Lighthouse uses PageSpeed Insights' settings; compare before/after on the same machine
 (it cannot reproduce the live server's own slowness — confirm on PageSpeed Insights).
 
+- A 5xx or 429 from the live site is passed on but never cached (a busy server once answered a
+  stylesheet with 503 after 15 s, which then blocked rendering in every later run).
+- Lighthouse simulates the load (Lantern): the document's own server time hardly changes the
+  simulated FCP/LCP, and an element drawn by JavaScript (a cookie banner) counts as loaded only
+  after every script that ran before it. Compare observed and simulated values (`metrics`
+  audit) before concluding that a change did nothing.
+- Third-party hosts are unreachable in the replay: their cost (an accessibility widget, Google
+  Fonts) only shows on PageSpeed Insights.
+
 ## Local WordPress — `local-wp/`
 
 ```bash
 bash tools/perf-lab/local-wp/setup.sh "$SCRATCH/wp"            # SQLite, Elementor, Hello, SHD Performance (symlink)
 PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8088 -t "$SCRATCH/wp" tools/perf-lab/local-wp/router.php
-python3 -I tools/perf-lab/local-wp/mirror-assets.py "$SITE" <saved-pages> "$SCRATCH/wp" "$SCRATCH/mirror/uploads"
+python3 -I tools/perf-lab/local-wp/mirror-assets.py "$SITE" <saved-pages> "$SCRATCH/wp" "$SCRATCH/mirror/uploads" --fonts --scripts
 MIRROR_SITE="$SITE" MIRROR_UPLOADS="$SCRATCH/mirror/uploads" \
   php tools/perf-lab/work/bin/wp-cli.phar --allow-root --path="$SCRATCH/wp" \
   eval-file tests/optimize-fixtures.php <saved-pages> <output-folder> live

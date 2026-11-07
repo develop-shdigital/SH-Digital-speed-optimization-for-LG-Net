@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# Build the installable plugin zips.
+# Build the installable plugin zip.
 #
 #   tools/build.sh
 #
-# For each plugin (shd-performance, shd-consent):
+# For SHD Performance:
 # 1. Minifies the inline front-end scripts (assets/js/*.js -> assets/js/min/*.min.js)
 #    with terser; the plugins fall back to the readable files when no build exists.
-# 2. Writes dist/<plugin>-<version>.zip, ready for Plugins → Add New → Upload.
+# 2. Writes dist/shd-performance-<version>.zip, ready for Plugins → Add New → Upload.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TERSER="${TERSER:-npx --yes terser@5}"
+# Pinned to the version that was checked; change only after reviewing a newer release.
+TERSER="${TERSER:-npx --yes terser@5.51.2}"
 mkdir -p "$ROOT/dist"
 
-for slug in shd-performance shd-consent; do
+for slug in shd-performance; do
 	PLUGIN="$ROOT/$slug"
 	mkdir -p "$PLUGIN/assets/js/min"
 	for src in "$PLUGIN"/assets/js/*.js; do
