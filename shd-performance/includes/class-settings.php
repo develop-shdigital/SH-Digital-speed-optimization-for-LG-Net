@@ -160,8 +160,8 @@ final class Settings {
 				'group'   => 'fonts',
 				'default' => 'live',
 				'risk'    => 'low',
-				'title'   => __( 'Fonts: preload and size-matched fallback', 'shd-performance' ),
-				'fixes'   => __( 'Archivo and Public Sans come from Elementor’s local copies of Google Fonts and are already WOFF2 with font-display: swap. They are now preloaded (the Latin file of each, which every page needs for its first screen), and the text uses a fallback whose size is matched to each font while it loads (Arial scaled to Archivo, Public Sans and Work Sans), so lines barely move when the font arrives. Fonts are found by themselves; the Fonts tab shows them.', 'shd-performance' ),
+				'title'   => __( 'Fonts: size-matched fallback', 'shd-performance' ),
+				'fixes'   => __( 'Archivo and Public Sans come from Elementor’s local copies of Google Fonts and are already WOFF2 with font-display: swap, so the text is first drawn in another font. While they load, the text now uses Arial scaled to each font (Archivo, Public Sans and Work Sans, also in the stylesheets of the hero slider and the other LGnet plugins). The sizes were tuned on the site’s own texts so that headings break into the same lines before and after the font arrives. Fonts are found by themselves; the Fonts tab shows them and can preload chosen weights (off: preloads delayed the main image on phones).', 'shd-performance' ),
 			),
 			'google_fonts'        => array(
 				'group'   => 'fonts',

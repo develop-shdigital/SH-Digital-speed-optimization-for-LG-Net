@@ -1587,7 +1587,7 @@ final class Admin {
 		$settings = Settings::get();
 		$woff2    = is_array( $settings['fonts']['woff2'] ) ? $settings['fonts']['woff2'] : array();
 
-		echo '<div class="shd-intro"><p>' . esc_html__( 'Custom fonts are detected from the Elementor kit and the homepage. With the “Fonts” optimization on, text is shown immediately in a size-matched fallback, uploaded WOFF2 files replace the larger originals (same letters, same look), and the main weights are preloaded.', 'shd-performance' ) . '</p>';
+		echo '<div class="shd-intro"><p>' . esc_html__( 'Custom fonts are detected from the Elementor kit and the homepage. With the “Fonts” optimization on, text is shown immediately in a size-matched fallback, uploaded WOFF2 files replace the larger originals (same letters, same look), and the weights chosen below are preloaded.', 'shd-performance' ) . '</p>';
 		echo '<div class="shd-actions">';
 		$this->button( 'fonts_detect', empty( $faces ) ? __( 'Detect fonts', 'shd-performance' ) : __( 'Detect again', 'shd-performance' ), array(), empty( $faces ) ? 'button button-primary' : 'button' );
 		echo '</div></div>';
