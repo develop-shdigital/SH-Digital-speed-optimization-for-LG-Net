@@ -1295,6 +1295,8 @@ final class Html_Optimizer {
 	 */
 	private function on_img( $p ) {
 		$loading = $p->get_attribute( 'loading' );
+		// Lazy in the page as built (by WordPress or Elementor), not by this plugin.
+		$was_lazy = 'lazy' === $loading;
 
 		if ( $this->in_home_link && ! empty( $this->on['a11y_names'] ) ) {
 			$this->logo_alt( $p );
@@ -1350,7 +1352,10 @@ final class Html_Optimizer {
 			$this->count( 'lazy_images' );
 		}
 
-		if ( ! empty( $this->on['image_sizes'] ) && 'lazy' === $loading ) {
+		// sizes="auto" only where the page made the image lazy itself (WordPress does the same for
+		// its lazy images): an image sized by its own dimensions (CSS width auto) takes the width
+		// of its box as its size with "auto", so on /tv/ the 600 px TV box became 614 px wide.
+		if ( ! empty( $this->on['image_sizes'] ) && $was_lazy ) {
 			$sizes  = $p->get_attribute( 'sizes' );
 			$srcset = $p->get_attribute( 'srcset' );
 			if ( is_string( $sizes ) && '' !== trim( $sizes ) && is_string( $srcset ) && '' !== trim( $srcset ) && 0 !== stripos( ltrim( $sizes ), 'auto' ) ) {

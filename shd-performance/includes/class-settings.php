@@ -49,7 +49,7 @@ final class Settings {
 				'default' => 'live',
 				'risk'    => 'low',
 				'title'   => __( 'Download images at the size they are shown', 'shd-performance' ),
-				'fixes'   => __( 'Adds sizes="auto" to lazy-loaded images so the browser picks the smallest file from the srcset that is still sharp at the displayed size. Nothing is re-compressed, so image quality is unchanged.', 'shd-performance' ),
+				'fixes'   => __( 'Adds sizes="auto" to images that WordPress or Elementor lazy-load, so the browser picks the smallest file from the srcset that is still sharp at the displayed size (WordPress does this only for some of them). Not for images this plugin makes lazy: an image sized by its own dimensions would take the width of its box. Nothing is re-compressed, so image quality is unchanged.', 'shd-performance' ),
 			),
 			'image_dimensions'    => array(
 				'group'   => 'layout',
