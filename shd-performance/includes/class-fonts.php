@@ -189,7 +189,15 @@ final class Fonts {
 		}
 		$metrics = Settings::get()['fonts']['metrics'];
 		// Measured metrics win; the measured defaults cover fonts without a TrueType source.
-		return array_merge( $defaults, is_array( $metrics ) ? $metrics : array() );
+		// Detection measures the regular face only: the extra weights stay.
+		$merged = $defaults;
+		foreach ( is_array( $metrics ) ? $metrics : array() as $key => $entry ) {
+			if ( is_array( $entry ) && empty( $entry['weights'] ) && ! empty( $defaults[ $key ]['weights'] ) ) {
+				$entry['weights'] = $defaults[ $key ]['weights'];
+			}
+			$merged[ $key ] = $entry;
+		}
+		return $merged;
 	}
 
 	/**
@@ -211,6 +219,27 @@ final class Fonts {
 				self::number( $entry['descent'] ),
 				self::number( $entry['line_gap'] )
 			);
+			// One face per weight the site uses, with Arial Bold from 600 (instead of a synthesized
+			// bold of Arial, which is narrower). The overrides are scaled by size-adjust, so they
+			// are converted to keep the same line metrics as the regular face.
+			foreach ( isset( $entry['weights'] ) && is_array( $entry['weights'] ) ? $entry['weights'] : array() as $weight => $size ) {
+				$weight = (int) $weight;
+				$size   = (float) $size;
+				if ( $weight < 100 || $weight > 1000 || $size <= 0 ) {
+					continue;
+				}
+				$scale = (float) $entry['size_adjust'] / $size;
+				$css  .= sprintf(
+					'@font-face{font-family:"%1$s";src:%2$s;font-weight:%3$d;size-adjust:%4$s%%;ascent-override:%5$s%%;descent-override:%6$s%%;line-gap-override:%7$s%%}',
+					esc_attr( self::fallback_name( $entry['family'] ) ),
+					$weight >= 600 ? 'local("Arial Bold"),local("Arial-BoldMT"),local("Helvetica Bold"),local("Helvetica-Bold"),local("Liberation Sans Bold"),local("LiberationSans-Bold")' : 'local("Arial"),local("ArialMT"),local("Helvetica"),local("Liberation Sans")',
+					$weight,
+					self::number( $size ),
+					self::number( round( (float) $entry['ascent'] * $scale, 2 ) ),
+					self::number( round( (float) $entry['descent'] * $scale, 2 ) ),
+					self::number( round( (float) $entry['line_gap'] * $scale, 2 ) )
+				);
+			}
 		}
 		return $css;
 	}

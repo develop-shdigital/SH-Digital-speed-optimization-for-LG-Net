@@ -70,9 +70,9 @@ preview link) or **Live** (every visitor).
 | SH Motion hides and fades in the first screen. | A small script right before SH Motion gives what is on screen at that moment SH Motion's own opt-out (`data-fx="none"`); everything further down fades in as designed, on each device. The off-canvas menu keeps its animations. | Live |
 | 17–19 stylesheets plus Elementor's inline CSS. | Joined in the same order into one cached file per page. | Live |
 | WordPress's block library on pages without blocks (/tv/). | Left out when the page has no block markup at all. | Live |
-| Archivo and Public Sans swap in with a different width. | Size-matched Arial fallbacks (measured from the fonts), also for Work Sans; fonts are detected by themselves. Font preloads are off: they delayed the main image on phones. | Live |
-| The header logo competes with the main image (twice per page). | The main image per device gets the priority; first-section backgrounds are preloaded. | Live |
-| Post-card backgrounds and lower sections load with the page. | They load when they come near the screen. | Live |
+| Archivo and Public Sans swap in with a different width. | Size-matched Arial fallbacks, also for Work Sans and in plugin stylesheets (hero slider, availability check, order wizard). Their widths are tuned on the site's own texts so that headings break into the same lines before and after the font arrives (bold faces for Public Sans). Font preloads are off: they delayed the main image on phones. | Live |
+| The header logo competes with the main image (twice per page). | The main image per device gets the priority (in post grids such as /ratgeber/ the first card's image); first-section backgrounds are preloaded. | Live |
+| Post-card images and backgrounds and everything below the first screen load with the page (on /ratgeber/ six card images, among them a 436 KB PNG, share the connection with the main image). | They load when they come near the screen (images natively, not in the menu, popups, tabs or accordions). | Live |
 | Links with only an icon have no name; the logo's alt text is “logo-mark-dark”. | Names in the page's language (DE, EN, FR, IT); the logo becomes “LGnet”; list roles and heading levels. | Live |
 | The table of contents of the articles grows after loading. | Filled in from the start. | Live |
 | No browser cache lifetimes. | `.htaccess` (mod_expires): CSS, JS and fonts a year, images and videos 30 days; checked after writing, removed again if the site does not answer. | Live |
@@ -146,8 +146,9 @@ wp eval-file tests/optimize-fixtures.php <folder-with-saved-html> <output-folder
 
 It fails if the visible text changes; links, images, forms, iframes, videos, SVGs or headings
 disappear; script tags are unbalanced or an inline script loses its code; the cookie banner is
-delayed or deferred at the wrong time; an image placeholder does not match its image; Google
-Fonts hints are removed while Google Fonts are still linked; or the document no longer parses.
+delayed or deferred at the wrong time; an image placeholder does not match its image; a post card
+other than the first of its grid gets high priority; Google Fonts hints are removed while Google
+Fonts are still linked; or the document no longer parses.
 
 Rules carried over from the original project: tests never send analytics hits, consent logs or
 form posts to live services (the replay blocks every other host and answers REST and non-GET

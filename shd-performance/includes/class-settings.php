@@ -69,8 +69,8 @@ final class Settings {
 				'group'   => 'content',
 				'default' => 'live',
 				'risk'    => 'low',
-				'title'   => __( 'Load background images and carousel slides further down when they come into view', 'shd-performance' ),
-				'fixes'   => __( 'Browsers download every CSS background image and every carousel slide during page load, even far below the screen. The post cards on /ratgeber/ and under the articles show the full-size featured images (the PNG of “Telefonanbieter Schweiz” alone is 1.9 MB). Backgrounds of post cards after the first row, of sections below the first screen and of the footer, and the slides of carousels below the first section, now load when they come within about one screen of view. The mobile menu’s background loads after the page has loaded or on the first tap. Elementor already does this for backgrounds from the 4th section on; this extends it. Image files and quality are unchanged.', 'shd-performance' ),
+				'title'   => __( 'Load images, background images and carousel slides further down when they come into view', 'shd-performance' ),
+				'fixes'   => __( 'Browsers download every CSS background image and every carousel slide during page load, even far below the screen, and every image without loading="lazy". The post cards on /ratgeber/ and under the articles show the full-size featured images (the PNG of “Telefonanbieter Schweiz” alone is 1.9 MB), and on /ratgeber/ all six card images shared the connection with the main image. Images and backgrounds of post cards after the first row, of sections below the first screen and of the footer, and the slides of carousels below the first section, now load when they come near the screen (images with the browser’s own lazy loading; not in the mobile menu, popups, tabs or accordions, which would only start loading when opened). The mobile menu’s background loads after the page has loaded or on the first tap. Elementor already does this for backgrounds from the 4th section on; this extends it. Image files and quality are unchanged.', 'shd-performance' ),
 			),
 			'lazy_iframes'        => array(
 				'group'   => 'content',
@@ -295,29 +295,41 @@ final class Settings {
 			'fonts'                 => array(
 				'faces'   => array(),
 				'woff2'   => array(),
-				// Size-matched Arial fallbacks, measured from the fonts' TrueType files (Google Fonts,
-				// weight 400) with Font_Metrics::fallback_overrides(). Detection on the Fonts tab
-				// replaces them when it finds TrueType sources.
+				// Size-matched Arial fallbacks. Vertical metrics from the fonts' TrueType files (Google
+				// Fonts) with Font_Metrics::fallback_overrides(), the same line heights at every size.
+				// The widths are tuned on the site's own texts (15 pages, phone and desktop, November
+				// 2026): the size at which the fewest texts break into a different number of lines
+				// than in the web font. Values measured from the font files (weight 400) made the
+				// Archivo headings, which are all 600/700, 5-7 % too narrow: "Wählen Sie Ihr
+				// Internet-Abo" on /internet/ fitted on one line until Archivo arrived.
+				// "weights": extra faces (Arial Bold from 600) for Public Sans buttons and menus.
+				// Archivo and Work Sans keep one face, which the browser makes bold: with Arial Bold,
+				// headings limited to a width in "ch" (digit widths) broke differently.
+				// Detection on the Fonts tab replaces the regular face when it finds TrueType sources.
 				'metrics' => array(
 					'archivo'     => array(
 						'family'      => 'Archivo',
-						'size_adjust' => 98.47,
-						'ascent'      => 89.17,
-						'descent'     => 21.33,
+						'size_adjust' => 105.4,
+						'ascent'      => 83.31,
+						'descent'     => 19.93,
 						'line_gap'    => 0,
 					),
 					'public sans' => array(
 						'family'      => 'Public Sans',
-						'size_adjust' => 105.05,
-						'ascent'      => 90.44,
-						'descent'     => 21.42,
+						'size_adjust' => 104,
+						'ascent'      => 91.35,
+						'descent'     => 21.64,
 						'line_gap'    => 0,
+						'weights'     => array(
+							600 => 101,
+							700 => 100.56,
+						),
 					),
 					'work sans'   => array(
 						'family'      => 'Work Sans',
-						'size_adjust' => 112.3,
-						'ascent'      => 82.82,
-						'descent'     => 21.64,
+						'size_adjust' => 107.5,
+						'ascent'      => 86.52,
+						'descent'     => 22.61,
 						'line_gap'    => 0,
 					),
 				),

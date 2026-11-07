@@ -1658,15 +1658,20 @@ final class Admin {
 			return;
 		}
 		echo '<p>' . esc_html__( 'While the web font loads, text is drawn in a local system font scaled to the same width and line height, so the page barely moves when the font arrives.', 'shd-performance' ) . '</p>';
-		echo '<table class="widefat striped shd-table"><thead><tr><th>' . esc_html__( 'Family', 'shd-performance' ) . '</th><th>size-adjust</th><th>ascent-override</th><th>descent-override</th><th>line-gap-override</th></tr></thead><tbody>';
+		echo '<table class="widefat striped shd-table"><thead><tr><th>' . esc_html__( 'Family', 'shd-performance' ) . '</th><th>size-adjust</th><th>ascent-override</th><th>descent-override</th><th>line-gap-override</th><th>' . esc_html__( 'Other weights (size-adjust; Arial Bold from 600)', 'shd-performance' ) . '</th></tr></thead><tbody>';
 		foreach ( $metrics as $entry ) {
+			$weights = array();
+			foreach ( isset( $entry['weights'] ) && is_array( $entry['weights'] ) ? $entry['weights'] : array() as $weight => $size ) {
+				$weights[] = (int) $weight . ': ' . number_format_i18n( (float) $size, 2 ) . ' %';
+			}
 			printf(
-				'<tr><td>%1$s</td><td>%2$s%%</td><td>%3$s%%</td><td>%4$s%%</td><td>%5$s%%</td></tr>',
+				'<tr><td>%1$s</td><td>%2$s%%</td><td>%3$s%%</td><td>%4$s%%</td><td>%5$s%%</td><td>%6$s</td></tr>',
 				esc_html( Fonts::fallback_name( $entry['family'] ) ),
 				esc_html( number_format_i18n( (float) $entry['size_adjust'], 2 ) ),
 				esc_html( number_format_i18n( (float) $entry['ascent'], 2 ) ),
 				esc_html( number_format_i18n( (float) $entry['descent'], 2 ) ),
-				esc_html( number_format_i18n( (float) $entry['line_gap'], 2 ) )
+				esc_html( number_format_i18n( (float) $entry['line_gap'], 2 ) ),
+				esc_html( $weights ? implode( ', ', $weights ) : '–' )
 			);
 		}
 		echo '</tbody></table>';

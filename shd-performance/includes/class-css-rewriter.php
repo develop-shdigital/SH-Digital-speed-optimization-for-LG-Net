@@ -83,6 +83,53 @@ final class Css_Rewriter {
 	}
 
 	/**
+	 * Whether this CSS names a family that has a size-matched fallback (font stacks only).
+	 *
+	 * @param string $css CSS.
+	 * @return bool
+	 */
+	public function wants_stacks( $css ) {
+		foreach ( $this->families as $family ) {
+			if ( isset( $this->fallbacks[ strtolower( $family ) ] ) && false !== stripos( $css, $family ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Only the font stacks get the fallbacks; @font-face rules (icon fonts among them) stay
+	 * exactly as they are. For stylesheets of plugins and themes.
+	 *
+	 * @param string $css      CSS.
+	 * @param string $base_url URL of the original file.
+	 * @return string
+	 */
+	public function rewrite_stacks( $css, $base_url = '' ) {
+		$faces = array();
+		$css   = (string) preg_replace_callback(
+			'/@font-face\s*\{[^}]*\}/i',
+			static function ( $match ) use ( &$faces ) {
+				$faces[] = $match[0];
+				return "\x00SHDFACE" . ( count( $faces ) - 1 ) . "\x00";
+			},
+			$css
+		);
+		$css   = $this->add_fallbacks( $css );
+		$css   = (string) preg_replace_callback(
+			"/\x00SHDFACE(\d+)\x00/",
+			static function ( $match ) use ( $faces ) {
+				return $faces[ (int) $match[1] ];
+			},
+			$css
+		);
+		if ( '' !== $base_url ) {
+			$css = self::absolutize_urls( $css, $base_url );
+		}
+		return $css;
+	}
+
+	/**
 	 * font-display: swap, and a WOFF2 source first when one has been uploaded.
 	 *
 	 * @param string $rule One @font-face rule.
@@ -135,20 +182,30 @@ final class Css_Rewriter {
 		if ( empty( $this->fallbacks ) ) {
 			return $css;
 		}
-		return preg_replace_callback(
+		$css = (string) preg_replace_callback(
 			'/((?:^|[;{\s])(?:font-family|--[\w-]*font[\w-]*)\s*:\s*)([^;{}]+)/i',
 			function ( $match ) {
 				return $match[1] . $this->add_fallback_to_list( $match[2] );
 			},
 			$css
 		);
+		// The font shorthand ("font: 600 clamp(30px,4vw,52px)/1.06 Archivo,sans-serif", used in
+		// widget custom CSS): its family list follows the size, after a space.
+		return (string) preg_replace_callback(
+			'/((?:^|[;{\s])font\s*:\s*)([^;{}]+)/i',
+			function ( $match ) {
+				return $match[1] . $this->add_fallback_to_list( $match[2], true );
+			},
+			$css
+		);
 	}
 
 	/**
-	 * @param string $list Font family list.
+	 * @param string $list      Font family list (or a font shorthand value).
+	 * @param bool   $shorthand Whether $list is a font shorthand (a family may follow a space).
 	 * @return string
 	 */
-	private function add_fallback_to_list( $list ) {
+	private function add_fallback_to_list( $list, $shorthand = false ) {
 		foreach ( $this->families as $family ) {
 			if ( ! isset( $this->fallbacks[ strtolower( $family ) ] ) ) {
 				continue;
@@ -162,6 +219,8 @@ final class Css_Rewriter {
 				$list = preg_replace( $quoted, '$0,"' . $fallback . '"', $list, 1 );
 			} elseif ( preg_match( '/(^|,)\s*' . preg_quote( $family, '/' ) . '\s*(?=,|$|!)/i', $list ) ) {
 				$list = preg_replace( '/(^|,)(\s*)' . preg_quote( $family, '/' ) . '(\s*)(?=,|$|!)/i', '$1$2' . $family . ',"' . $fallback . '"$3', $list, 1 );
+			} elseif ( $shorthand && preg_match( '/(\s)' . preg_quote( $family, '/' ) . '\s*(?=,|$|!)/i', $list ) ) {
+				$list = preg_replace( '/(\s)' . preg_quote( $family, '/' ) . '(\s*)(?=,|$|!)/i', '$1' . $family . ',"' . $fallback . '"$2', $list, 1 );
 			}
 		}
 		return $list;
@@ -192,18 +251,19 @@ final class Css_Rewriter {
 	/**
 	 * URL of a rewritten copy of a local stylesheet, or null to keep the original.
 	 *
-	 * @param string $href Stylesheet URL.
-	 * @param string $sig  Settings signature (part of the cache key).
+	 * @param string $href        Stylesheet URL.
+	 * @param string $sig         Settings signature (part of the cache key).
+	 * @param bool   $stacks_only Only add the fallbacks to font stacks (plugins and themes).
 	 * @return string|null
 	 */
-	public function rewritten_url( $href, $sig ) {
+	public function rewritten_url( $href, $sig, $stacks_only = false ) {
 		$path = Fonts::local_path( $href );
 		if ( null === $path || ! preg_match( '/\.css$/i', $path ) ) {
 			return null;
 		}
 		$mtime   = (int) filemtime( $path );
 		$uploads = wp_get_upload_dir();
-		$name    = sanitize_file_name( basename( $path, '.css' ) ) . '-' . substr( md5( $path . '|' . $mtime . '|' . $sig . '|' . SHD_PERF_VERSION ), 0, 12 ) . '.css';
+		$name    = sanitize_file_name( basename( $path, '.css' ) ) . '-' . substr( md5( $path . '|' . $mtime . '|' . $sig . '|' . SHD_PERF_VERSION . ( $stacks_only ? '|stacks' : '' ) ), 0, 12 ) . '.css';
 		$dir     = trailingslashit( $uploads['basedir'] ) . self::CACHE_SUBDIR;
 		$target  = trailingslashit( $dir ) . $name;
 		$url     = trailingslashit( $uploads['baseurl'] ) . self::CACHE_SUBDIR . '/' . $name;
@@ -219,14 +279,22 @@ final class Css_Rewriter {
 
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local stylesheet.
 		$css = file_get_contents( $path );
-		if ( false === $css || ! $this->wants( $css ) ) {
+		if ( false === $css || ! ( $stacks_only ? $this->wants_stacks( $css ) : $this->wants( $css ) ) ) {
 			return null;
+		}
+		if ( $stacks_only ) {
+			$rewritten = $this->rewrite_stacks( $css );
+			if ( $rewritten === $css ) {
+				return null; // The family is named, but not in a font stack: keep the original file.
+			}
+			$rewritten = self::absolutize_urls( $rewritten, $href );
+		} else {
+			$rewritten = $this->rewrite( $css, $href );
 		}
 		if ( ! wp_mkdir_p( $dir ) ) {
 			return null;
 		}
 
-		$rewritten = $this->rewrite( $css, $href );
 		$temp      = $target . '.' . wp_generate_password( 6, false, false ) . '.tmp';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- cache file.
 		if ( false === file_put_contents( $temp, $rewritten ) || ! @rename( $temp, $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged

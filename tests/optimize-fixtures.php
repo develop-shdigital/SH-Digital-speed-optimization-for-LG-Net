@@ -240,6 +240,34 @@ foreach ( $files as $file ) {
 			}
 		}
 	}
+	// The main image is never lazy-loaded.
+	if ( preg_match_all( '#<img\b[^>]*\sfetchpriority="high"[^>]*>#i', $result, $high ) ) {
+		foreach ( $high[0] as $img ) {
+			if ( preg_match( '#\sloading="lazy"#i', $img ) ) {
+				$problems[] = 'high-priority image is lazy';
+				break;
+			}
+		}
+	}
+	// Loop grid cards show their images at one size: a prioritized card image must be in the
+	// first card of its template (the one on screen first).
+	if ( ! empty( $features['lcp_image'] ) && preg_match_all( '#<div\b[^>]*data-elementor-type="loop-item"[^>]*>#i', $result, $cards, PREG_OFFSET_CAPTURE ) ) {
+		$first = array();
+		foreach ( $cards[0] as $i => $card ) {
+			preg_match( '#data-elementor-id="(\d+)"#', $card[0], $template );
+			$template = isset( $template[1] ) ? $template[1] : '';
+			$end      = isset( $cards[0][ $i + 1 ] ) ? $cards[0][ $i + 1 ][1] : strlen( $result );
+			$markup   = substr( $result, $card[1], $end - $card[1] );
+			if ( ! preg_match( '#<img\b[^>]*>#i', $markup, $image ) ) {
+				continue;
+			}
+			if ( isset( $first[ $template ] ) && preg_match( '#\sfetchpriority="high"#i', $image[0] ) ) {
+				$problems[] = 'a later loop card image has high priority';
+				break;
+			}
+			$first[ $template ] = true;
+		}
+	}
 	// Google Fonts: connection hints only go when no Google stylesheet is left.
 	if ( preg_match( '#<link\b[^>]*href="(?:https?:)?//fonts\.googleapis\.com/css#i', $result ) && substr_count( $html, 'fonts.gstatic.com' ) !== substr_count( $result, 'fonts.gstatic.com' ) ) {
 		$problems[] = 'Google Fonts preconnect removed while Google Fonts are still linked';

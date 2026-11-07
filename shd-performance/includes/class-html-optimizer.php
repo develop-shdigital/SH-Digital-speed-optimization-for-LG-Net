@@ -39,6 +39,9 @@ final class Html_Optimizer {
 	/** WordPress libraries the Cookiez banner reads when it starts (window.wp.i18n); never delayed while the banner is not. */
 	const CONSENT_DEPENDENCIES = array( '/wp-includes/js/dist/hooks', '/wp-includes/js/dist/i18n' );
 
+	/** Elementor parts that are shown only when the visitor opens them. */
+	const CLOSED_CLASSES = array( 'e-off-canvas', 'e-n-tabs', 'e-n-accordion', 'e-n-menu', 'elementor-widget-tabs', 'elementor-widget-accordion', 'elementor-widget-toggle', 'elementor-nav-menu--dropdown' );
+
 	/** @var array<string,bool> Active features. */
 	private $on;
 
@@ -70,6 +73,9 @@ final class Html_Optimizer {
 
 	/** @var bool Swiss German (ss instead of ß). */
 	private $swiss          = true;
+
+	/** @var string[] Language folders of the site's translations (/en/, /fr/…), from the page's hreflang links. */
+	private $lang_prefixes  = array();
 	private $has_toc        = false;
 	private $toc_collapsed  = 0;
 
@@ -95,6 +101,8 @@ final class Html_Optimizer {
 	private $lcp            = array();
 	private $lcp_counter    = 0;
 	private $other_high     = false;
+	// Loop grid template id => post of its first card with a candidate image.
+	private $lcp_first_card = array();
 
 	// Sections with a background image in the first screen (resolved in finalize()).
 	private $bg_candidates  = array();
@@ -257,6 +265,7 @@ final class Html_Optimizer {
 		// Language versions (SHD Translator: /en/, /fr/, /it/) get names in their own language.
 		$locale = preg_match( '/<html\b[^>]*\slang=["\']?([a-z]{2,3})(?:[-_]([a-z]{2}))?/i', $html, $l ) ? strtolower( $l[1] ) . ( isset( $l[2] ) ? '_' . strtoupper( $l[2] ) : '' ) : get_locale();
 		$this->lang  = self::language( $locale );
+		$this->lang_prefixes = self::language_prefixes( $html );
 		$this->swiss = 0 === stripos( $locale, 'de_CH' ) || 0 === stripos( (string) get_locale(), 'de_CH' );
 		// SH Motion (scroll-reveal animations) adds its classes at runtime; its opt-out is data-fx="none".
 		$this->sh_motion = (bool) preg_match( '#/plugins/sh-motion/assets/motion(?:\.min)?\.js#i', $html );
@@ -303,13 +312,14 @@ final class Html_Optimizer {
 		}
 
 		$this->strip_animation( $p );
+		$this->style_fallbacks( $p );
 
 		switch ( $tag ) {
 			case 'DIV':
 				$this->on_div( $p );
 				break;
 			case 'A':
-				$this->in_home_link = self::is_home_link( $p->get_attribute( 'href' ) );
+				$this->in_home_link = self::is_home_link( $p->get_attribute( 'href' ), $this->lang_prefixes );
 				$this->on_anchor( $p );
 				break;
 			case 'H1':
@@ -365,6 +375,11 @@ final class Html_Optimizer {
 		if ( 'loop-item' === $type && preg_match( '/\be-loop-item-(\d+)\b/', (string) $p->get_attribute( 'class' ), $post ) ) {
 			$loop = (int) $post[1];
 		}
+		// Loop item template of that card: all cards of one template show their images at one size.
+		$card = null !== $parent ? $parent[5] : 0;
+		if ( 'loop-item' === $type ) {
+			$card = (int) $p->get_attribute( 'data-elementor-id' );
+		}
 
 		if ( is_string( $type ) && '' !== $type ) {
 			if ( 'header' === $type ) {
@@ -403,19 +418,31 @@ final class Html_Optimizer {
 			$this->in_footer = true;
 		}
 
-		$lazy = false;
+		// Lazy mode of this element's backgrounds: "view", "idle" or '' (see lazy_bg_mode()).
+		$lazy = '';
 		if ( ! empty( $this->on['lazy_backgrounds'] ) && ! $this->inside_lazy_bg() ) {
-			$mode = $this->lazy_bg_mode( $p, $tag, $role, is_string( $type ) ? $type : '' );
-			if ( '' !== $mode ) {
-				$p->set_attribute( 'data-shd-lazy-bg', $mode );
+			$lazy = $this->lazy_bg_mode( $p, $tag, $role, is_string( $type ) ? $type : '' );
+			if ( '' !== $lazy ) {
+				$p->set_attribute( 'data-shd-lazy-bg', $lazy );
 				++$this->lazy_bg;
-				$lazy = true;
 			}
 		}
 
 		// Already marked (a page optimized before): its backgrounds wait as well.
-		$lazy          = $lazy || null !== $p->get_attribute( 'data-shd-lazy-bg' );
-		$this->stack[] = array( $tag, $role, $lazy, $hidden, $loop );
+		$marked = $p->get_attribute( 'data-shd-lazy-bg' );
+		if ( '' === $lazy && null !== $marked ) {
+			$lazy = 'idle' === $marked ? 'idle' : 'view';
+		}
+
+		// Shown only when opened (menu, popup, tab, accordion): a lazy image there would only
+		// start loading when the visitor opens it.
+		$closed = ( null !== $parent && $parent[6] ) || 'popup' === $role;
+		foreach ( self::CLOSED_CLASSES as $class ) {
+			if ( ! $closed && $p->has_class( $class ) ) {
+				$closed = true;
+			}
+		}
+		$this->stack[] = array( $tag, $role, $lazy, $hidden, $loop, $card, $closed );
 
 		if ( ! empty( $this->on['lcp_image'] ) ) {
 			$this->background_candidate( $p );
@@ -545,6 +572,24 @@ final class Html_Optimizer {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the current element is in a part whose backgrounds load when it comes into view
+	 * (post cards after the first row, sections below the first screen, the footer) and not
+	 * in something that is shown only when opened.
+	 *
+	 * @return bool
+	 */
+	private function inside_view_bg() {
+		$view = false;
+		foreach ( $this->stack as $item ) {
+			if ( $item[6] ) {
+				return false;
+			}
+			$view = $view || 'view' === $item[2];
+		}
+		return $view;
 	}
 
 	/**
@@ -706,6 +751,27 @@ final class Html_Optimizer {
 	}
 
 	/**
+	 * Size-matched fallback fonts also in style attributes: the comparison table on /mobile/
+	 * sets style="font-family:'Work Sans',Arial,sans-serif" on its container.
+	 *
+	 * @param \WP_HTML_Tag_Processor $p Processor.
+	 */
+	private function style_fallbacks( $p ) {
+		if ( null === $this->css ) {
+			return;
+		}
+		$style = $p->get_attribute( 'style' );
+		if ( ! is_string( $style ) || false === stripos( $style, 'font' ) || ! $this->css->wants( $style ) ) {
+			return;
+		}
+		$new = $this->css->rewrite( $style );
+		if ( $new !== $style ) {
+			$p->set_attribute( 'style', $new );
+			$this->count( 'style_fallbacks' );
+		}
+	}
+
+	/**
 	 * @param \WP_HTML_Tag_Processor $p Processor.
 	 */
 	private function on_div( $p ) {
@@ -818,7 +884,7 @@ final class Html_Optimizer {
 				return;
 			}
 		}
-		$name = self::link_name( $href, $this->lang, $this->swiss );
+		$name = self::link_name( $href, $this->lang, $this->swiss, $this->lang_prefixes );
 		if ( '' !== $name ) {
 			$p->set_attribute( 'aria-label', $name );
 			$this->count( 'link_names' );
@@ -1046,7 +1112,7 @@ final class Html_Optimizer {
 	 * @param mixed $href Link target.
 	 * @return bool Whether the link goes to the homepage.
 	 */
-	private static function is_home_link( $href ) {
+	private static function is_home_link( $href, array $prefixes = array() ) {
 		if ( ! is_string( $href ) || '' === trim( $href ) ) {
 			return false;
 		}
@@ -1057,20 +1123,48 @@ final class Html_Optimizer {
 		if ( '/' === $href || $strip( $href ) === $strip( home_url( '/' ) ) ) {
 			return true;
 		}
-		// The homepage of a language version (/en/, /fr/, /it/).
-		return (bool) preg_match( '#^' . preg_quote( $strip( home_url( '/' ) ), '#' ) . '/[a-z]{2}(?:-[a-z]{2,4})?$#i', $strip( $href ) )
-			|| (bool) preg_match( '#^/[a-z]{2}(?:-[a-z]{2,4})?/?$#i', $href );
+		// The homepage of a language version (/en/), only for the languages the page links as
+		// translations: /tv/ is a page, not a language.
+		foreach ( $prefixes as $prefix ) {
+			if ( $strip( $href ) === $strip( home_url( '/' . $prefix . '/' ) ) || in_array( strtolower( $href ), array( '/' . $prefix, '/' . $prefix . '/' ), true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Language folders of the site's translations, from the page's hreflang links: a link
+	 * whose language is "en-GB" and whose address starts with /en/ makes "en" a prefix.
+	 *
+	 * @param string $html Document.
+	 * @return string[]
+	 */
+	public static function language_prefixes( $html ) {
+		$prefixes = array();
+		$head     = substr( $html, 0, (int) stripos( $html, '</head>' ) );
+		$base     = trailingslashit( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ) );
+		if ( preg_match_all( '#<link\b[^>]*\bhreflang=["\']([a-z]{2,3})(?:-[a-z0-9]+)?["\'][^>]*>#i', $head, $links, PREG_SET_ORDER ) ) {
+			foreach ( $links as $link ) {
+				$lang = strtolower( $link[1] );
+				if ( preg_match( '#\bhref=["\']([^"\']+)["\']#i', $link[0], $href ) && 0 === stripos( (string) wp_parse_url( html_entity_decode( $href[1], ENT_QUOTES ), PHP_URL_PATH ), $base . $lang . '/' ) ) {
+					$prefixes[ $lang ] = $lang;
+				}
+			}
+		}
+		return array_values( $prefixes );
 	}
 
 	/**
 	 * A name for an icon-only link, from its target, in the page's language.
 	 *
-	 * @param string    $href  Link target.
-	 * @param string    $lang  Language of the page (de, en, fr, it); '' for the site's.
-	 * @param bool|null $swiss Swiss German spelling; null for the site's locale.
+	 * @param string    $href     Link target.
+	 * @param string    $lang     Language of the page (de, en, fr, it); '' for the site's.
+	 * @param bool|null $swiss    Swiss German spelling; null for the site's locale.
+	 * @param string[]  $prefixes Language folders of the translations (en, fr…).
 	 * @return string Empty when nothing sensible can be said.
 	 */
-	public static function link_name( $href, $lang = '', $swiss = null ) {
+	public static function link_name( $href, $lang = '', $swiss = null, array $prefixes = array() ) {
 		$lang   = '' !== $lang ? $lang : self::language( get_locale() );
 		$swiss  = null === $swiss ? 0 === strpos( get_locale(), 'de_CH' ) : $swiss;
 		$target = rawurldecode( html_entity_decode( trim( $href ), ENT_QUOTES ) );
@@ -1136,7 +1230,7 @@ final class Html_Optimizer {
 		$home = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
 		if ( $host === $home ) {
 			$path = (string) wp_parse_url( $target, PHP_URL_PATH );
-			if ( '' === trim( $path, '/' ) || preg_match( '#^/[a-z]{2}(?:-[a-z]{2,4})?/?$#i', $path ) ) {
+			if ( '' === trim( $path, '/' ) || in_array( strtolower( trim( $path, '/' ) ), $prefixes, true ) ) {
 				return self::text( 'home', $lang, $swiss );
 			}
 			$id = url_to_postid( $target );
@@ -1247,6 +1341,15 @@ final class Html_Optimizer {
 			$this->count( 'lazy_carousel_images' );
 		}
 
+		// Images in the same places as the backgrounds that wait (post cards after the first
+		// row, sections below the first screen, the footer) load when they come near the
+		// screen. Not in parts shown only when opened, which would only then start loading.
+		if ( ! empty( $this->on['lazy_backgrounds'] ) && null === $loading && ! $this->inside( 'carousel' ) && $this->inside_view_bg() ) {
+			$p->set_attribute( 'loading', 'lazy' );
+			$loading = 'lazy';
+			$this->count( 'lazy_images' );
+		}
+
 		if ( ! empty( $this->on['image_sizes'] ) && 'lazy' === $loading ) {
 			$sizes  = $p->get_attribute( 'sizes' );
 			$srcset = $p->get_attribute( 'srcset' );
@@ -1267,6 +1370,18 @@ final class Html_Optimizer {
 		$featured = $this->inside( 'featured' );
 		if ( ! $featured && ( $area < 150 * 150 || $this->text_now > self::FIRST_SCREEN_TEXT ) ) {
 			return;
+		}
+
+		// Cards of one loop grid show their images at the same size, whatever the size of the
+		// files: the first card's image is on screen first (phones show one card per row), so
+		// the other cards' images are no candidates. Width and height only tell the file's size.
+		$top = empty( $this->stack ) ? null : $this->stack[ count( $this->stack ) - 1 ];
+		if ( ! $featured && null !== $top && $top[5] > 0 && $top[4] > 0 ) {
+			if ( ! isset( $this->lcp_first_card[ $top[5] ] ) ) {
+				$this->lcp_first_card[ $top[5] ] = $top[4];
+			} elseif ( $this->lcp_first_card[ $top[5] ] !== $top[4] ) {
+				return;
+			}
 		}
 
 		$candidate = array( 'hidden' => array() );
@@ -1677,8 +1792,15 @@ final class Html_Optimizer {
 			return;
 		}
 
-		if ( null !== $this->css && '' !== $href && preg_match( '#/uploads/elementor/css/[^/?]+\.css#i', $href ) ) {
-			$url = $this->css->rewritten_url( $href, $this->font_sig );
+		if ( null !== $this->css && '' !== $href ) {
+			$url = null;
+			if ( preg_match( '#/uploads/elementor/css/[^/?]+\.css#i', $href ) ) {
+				$url = $this->css->rewritten_url( $href, $this->font_sig );
+			} elseif ( preg_match( '#/wp-content/(?:plugins|themes)/[^?\#]+\.css#i', $href ) ) {
+				// Plugins and themes (the hero slider's "--lgnet-hero-font-head: Archivo, Helvetica…"):
+				// only their font stacks get the fallback; their @font-face rules stay as they are.
+				$url = $this->css->rewritten_url( $href, $this->font_sig, true );
+			}
 			if ( $url ) {
 				$p->set_attribute( 'href', $url );
 				$this->count( 'css_rewritten' );
