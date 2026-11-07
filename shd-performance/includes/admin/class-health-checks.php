@@ -1,0 +1,461 @@
+<?php
+/**
+ * Automated health checks run from the dashboard.
+ *
+ * The site requests its own pages the way a phone, a desktop browser, an ad
+ * click and an uncached visit would, and inspects server settings.
+ *
+ * @package SHD\Performance
+ */
+
+namespace SHD\Performance;
+
+defined( 'ABSPATH' ) || exit;
+
+final class Health_Checks {
+
+	const OPTION = 'shd_perf_health';
+
+	const UA_DESKTOP = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+	const UA_MOBILE  = 'Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+
+	/**
+	 * Run every check and store the results.
+	 *
+	 * @return array
+	 */
+	public static function run() {
+		$results = array();
+		$home    = home_url( '/' );
+
+		$desktop  = self::fetch( $home, self::UA_DESKTOP );
+		$mobile_1 = self::fetch( $home, self::UA_MOBILE );
+		$mobile_2 = self::fetch( $home, self::UA_MOBILE );
+		$campaign = self::fetch( add_query_arg( array( 'utm_source' => 'shd-check', 'gclid' => 'shd-check' ), $home ), self::UA_MOBILE );
+		$fresh    = self::fetch( add_query_arg( 'shd-nocache', wp_generate_password( 8, false, false ), $home ), self::UA_DESKTOP );
+
+		$results['page_cache']      = self::page_cache_result();
+		$results['cache_desktop']   = self::cache_result( __( 'Page cache, desktop visitors', 'shd-performance' ), $desktop, 'page-cache' );
+		$results['cache_mobile']    = self::mobile_result( $mobile_1, $mobile_2 );
+		$results['cache_campaign']  = self::cache_result( __( 'Page cache for ad/campaign links (?gclid=, ?utm_…)', 'shd-performance' ), $campaign, 'cache-query-params' );
+		$results['ttfb_uncached']   = self::uncached_result( $fresh );
+		$results['optimized_cache'] = self::marker_result( $desktop );
+		$results['compression']     = self::compression_result();
+		$results['browser_cache']   = self::browser_cache_result();
+		$results['ga_duplicate']    = self::ga_result( $desktop );
+
+		$results['php']          = self::php_result();
+		$results['opcache']      = self::opcache_result();
+		$results['object_cache'] = array(
+			'label'  => __( 'Persistent object cache', 'shd-performance' ),
+			'status' => wp_using_ext_object_cache() ? 'good' : 'warn',
+			'value'  => wp_using_ext_object_cache() ? __( 'active', 'shd-performance' ) : __( 'not active', 'shd-performance' ),
+			'detail' => __( 'A persistent object cache (Redis or Memcached, offered by many hosts) speeds up every uncached page, the admin and form submissions.', 'shd-performance' ),
+			'task'   => 'server-ttfb',
+		);
+		$results['autoload']     = self::autoload_result();
+		$results['debug']        = self::debug_result();
+		$results['font_icons']   = self::font_icons_result();
+		$results['redirects']    = self::redirect_result();
+		$results['robots']       = self::robots_result();
+
+		$stored = array(
+			'time'    => time(),
+			'results' => $results,
+		);
+		update_option( self::OPTION, $stored, false );
+		return $stored;
+	}
+
+	/**
+	 * Last stored results.
+	 *
+	 * @return array{time:int,results:array}|null
+	 */
+	public static function last() {
+		$stored = get_option( self::OPTION );
+		return is_array( $stored ) && isset( $stored['results'] ) ? $stored : null;
+	}
+
+	/**
+	 * @param string $url URL.
+	 * @param string $ua  User agent.
+	 * @return array{ok:bool,code:int,ms:int,headers:array,body:string,error:string}
+	 */
+	private static function fetch( $url, $ua ) {
+		$start    = microtime( true );
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout'    => 30,
+				'redirection' => 3,
+				'user-agent' => $ua,
+				'sslverify'  => apply_filters( 'https_local_ssl_verify', false ),
+				'headers'    => array(
+					'Accept'          => 'text/html',
+					'Accept-Encoding' => 'gzip',
+					'Cache-Control'   => 'no-cache',
+				),
+				'decompress' => true,
+				'cookies'    => array(),
+			)
+		);
+		$ms = (int) round( ( microtime( true ) - $start ) * 1000 );
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'ok'      => false,
+				'code'    => 0,
+				'ms'      => $ms,
+				'headers' => array(),
+				'body'    => '',
+				'error'   => $response->get_error_message(),
+			);
+		}
+		$headers = array();
+		foreach ( wp_remote_retrieve_headers( $response ) as $name => $value ) {
+			$headers[ strtolower( $name ) ] = is_array( $value ) ? implode( ', ', $value ) : (string) $value;
+		}
+		return array(
+			'ok'      => 200 === (int) wp_remote_retrieve_response_code( $response ),
+			'code'    => (int) wp_remote_retrieve_response_code( $response ),
+			'ms'      => $ms,
+			'headers' => $headers,
+			'body'    => (string) wp_remote_retrieve_body( $response ),
+			'error'   => '',
+		);
+	}
+
+	/**
+	 * Cache status from common response headers or footprints.
+	 *
+	 * @param array $response Response.
+	 * @return string hit|miss|unknown
+	 */
+	private static function cache_state( array $response ) {
+		$headers = $response['headers'];
+		foreach ( array( 'x-shd-cache', 'x-cache', 'cf-cache-status', 'x-litespeed-cache', 'x-proxy-cache', 'x-wp-super-cache', 'x-cache-status', 'x-rocket-nginx-serving-static' ) as $name ) {
+			if ( isset( $headers[ $name ] ) ) {
+				return preg_match( '/\bhit\b/i', $headers[ $name ] ) ? 'hit' : 'miss';
+			}
+		}
+		if ( isset( $headers['age'] ) && (int) $headers['age'] > 0 ) {
+			return 'hit';
+		}
+		return 'unknown';
+	}
+
+	private static function describe( array $response ) {
+		if ( ! $response['ok'] ) {
+			/* translators: 1: HTTP code, 2: error */
+			return sprintf( __( 'request failed (%1$s %2$s)', 'shd-performance' ), $response['code'], $response['error'] );
+		}
+		$state = self::cache_state( $response );
+		$label = 'hit' === $state ? 'HIT' : ( 'miss' === $state ? 'MISS' : __( 'no cache header', 'shd-performance' ) );
+		$via   = isset( $response['headers']['x-cached-by'] ) ? ' · ' . $response['headers']['x-cached-by'] : '';
+		if ( isset( $response['headers']['x-shd-cache'] ) && preg_match( '/\(([^)]+)\)/', $response['headers']['x-shd-cache'], $m ) ) {
+			$via = ' · SHD Performance (' . $m[1] . ')';
+		}
+		return sprintf( '%s · %s ms%s', $label, number_format_i18n( $response['ms'] ), $via );
+	}
+
+	private static function cache_result( $label, array $response, $task ) {
+		$state = self::cache_state( $response );
+		return array(
+			'label'  => $label,
+			'status' => ! $response['ok'] ? 'warn' : ( 'hit' === $state ? 'good' : ( 'miss' === $state ? 'bad' : 'warn' ) ),
+			'value'  => self::describe( $response ),
+			'detail' => __( 'A cached page is answered in well under a second; a MISS means WordPress builds the page for that visitor (about 2.5 s on this server when measured).', 'shd-performance' ),
+			'task'   => $task,
+		);
+	}
+
+	private static function mobile_result( array $first, array $second ) {
+		$state_1 = self::cache_state( $first );
+		$state_2 = self::cache_state( $second );
+		$status  = 'hit' === $state_1 ? 'good' : ( 'hit' === $state_2 ? 'warn' : 'bad' );
+		return array(
+			'label'  => __( 'Page cache, phone visitors', 'shd-performance' ),
+			'status' => $first['ok'] ? $status : 'warn',
+			/* translators: 1: first request, 2: second request */
+			'value'  => sprintf( __( 'first request: %1$s — second request: %2$s', 'shd-performance' ), self::describe( $first ), self::describe( $second ) ),
+			'detail' => __( 'Google tests the mobile version. If the first phone request is a MISS, the first phone visitor to every page (and often Google’s test) waits for WordPress to build the page.', 'shd-performance' ),
+			'task'   => 'page-cache',
+		);
+	}
+
+	private static function uncached_result( array $response ) {
+		$ms = $response['ms'];
+		return array(
+			'label'  => __( 'Time to build an uncached page', 'shd-performance' ),
+			'status' => ! $response['ok'] ? 'warn' : ( $ms <= 800 ? 'good' : ( $ms <= 1800 ? 'warn' : 'bad' ) ),
+			/* translators: %s: milliseconds */
+			'value'  => $response['ok'] ? sprintf( __( '%s ms (homepage, cache bypassed)', 'shd-performance' ), number_format_i18n( $ms ) ) : self::describe( $response ),
+			'detail' => __( 'Measured from the server itself, so network time is close to zero. Every cache miss, logged-in editor and form submission waits this long.', 'shd-performance' ),
+			'task'   => 'server-ttfb',
+		);
+	}
+
+	private static function marker_result( array $response ) {
+		$found = (bool) preg_match( '/<!-- SHD Performance [^\s]+ \((\w+)\)/', $response['body'], $m );
+		return array(
+			'label'  => __( 'Cached pages include the optimizations', 'shd-performance' ),
+			'status' => ! $response['ok'] ? 'warn' : ( $found ? 'good' : 'bad' ),
+			'value'  => $found ? __( 'yes', 'shd-performance' ) : __( 'no — purge the page cache', 'shd-performance' ),
+			'detail' => __( 'Pages cached before a change was made still show the old version until the page cache is purged.', 'shd-performance' ),
+			'task'   => 'preview-test',
+		);
+	}
+
+	private static function compression_result() {
+		// A static file shows what the web server does (the homepage comes from the page cache,
+		// which keeps its own gzip copies). Only the headers count; the body stays compressed.
+		$response = wp_remote_get(
+			includes_url( 'css/dashicons.min.css' ),
+			array(
+				'timeout'    => 15,
+				'decompress' => false,
+				'user-agent' => self::UA_DESKTOP,
+				'sslverify'  => apply_filters( 'https_local_ssl_verify', false ),
+				'headers'    => array( 'Accept-Encoding' => 'gzip, deflate, br' ),
+			)
+		);
+		$header   = static function ( $name ) use ( $response ) {
+			$value = is_wp_error( $response ) ? '' : wp_remote_retrieve_header( $response, $name );
+			return strtolower( trim( is_array( $value ) ? implode( ', ', $value ) : (string) $value ) );
+		};
+		$encoding = $header( 'content-encoding' );
+		$server   = self::server_name( $header( 'server' ) );
+		$http3    = false !== strpos( $header( 'alt-svc' ), 'h3' );
+		$pages    = Page_Cache::check_brotli();
+		$value    = sprintf(
+			/* translators: 1: encoding of files, 2: encoding of stored pages, 3: yes/no, 4: server software */
+			__( 'files: %1$s · stored pages: %2$s · HTTP/3: %3$s · server: %4$s', 'shd-performance' ),
+			'' !== $encoding ? $encoding : __( 'none', 'shd-performance' ),
+			null === $pages ? '—' : ( $pages ? 'br' : 'gzip' ),
+			$http3 ? __( 'yes', 'shd-performance' ) : __( 'no', 'shd-performance' ),
+			$server
+		);
+		return array(
+			'label'  => __( 'Text compression', 'shd-performance' ),
+			'status' => 'br' === $encoding ? 'good' : ( 'gzip' === $encoding ? 'warn' : 'bad' ),
+			'value'  => $value,
+			'detail' => __( 'Brotli makes HTML, CSS and JavaScript about 15–20% smaller than gzip; HTTP/3 speeds up connections on mobile networks. Both are settings of the web server (see the checklist).', 'shd-performance' ),
+			'task'   => 'compression',
+		);
+	}
+
+	/**
+	 * Cache lifetime the web server sends for a static file (WordPress's jQuery).
+	 *
+	 * @return array
+	 */
+	private static function browser_cache_result() {
+		$response = wp_remote_head(
+			includes_url( 'js/jquery/jquery.min.js' ),
+			array(
+				'timeout'    => 15,
+				'user-agent' => self::UA_DESKTOP,
+				'sslverify'  => apply_filters( 'https_local_ssl_verify', false ),
+			)
+		);
+		$control = is_wp_error( $response ) ? '' : strtolower( (string) wp_remote_retrieve_header( $response, 'cache-control' ) );
+		$expires = is_wp_error( $response ) ? '' : (string) wp_remote_retrieve_header( $response, 'expires' );
+		$seconds = preg_match( '/max-age\s*=\s*(\d+)/', $control, $m ) ? (int) $m[1] : ( '' !== $expires && false !== strtotime( $expires ) ? max( 0, strtotime( $expires ) - time() ) : 0 );
+		$value   = 0 === $seconds ? __( 'none sent', 'shd-performance' ) : ( $seconds >= DAY_IN_SECONDS ? sprintf( /* translators: %d: days */ _n( '%d day', '%d days', (int) round( $seconds / DAY_IN_SECONDS ), 'shd-performance' ), (int) round( $seconds / DAY_IN_SECONDS ) ) : sprintf( /* translators: %d: seconds */ __( '%d s', 'shd-performance' ), $seconds ) );
+		$status  = Domain_Rules::status();
+		return array(
+			'label'  => __( 'Browser cache lifetime of static files', 'shd-performance' ),
+			'status' => is_wp_error( $response ) ? 'info' : ( $seconds >= 30 * DAY_IN_SECONDS ? 'good' : 'warn' ),
+			'value'  => is_wp_error( $response ) ? $response->get_error_message() : $value,
+			'detail' => __( 'Without a lifetime, browsers ask the server again for CSS, scripts, fonts and images on later page views. “Browser cache lifetimes” (Optimizations tab) sets them in .htaccess; on a server without mod_expires, ask the host.', 'shd-performance' ) . ( isset( $status['browser_cache'] ) && 'reverted' === $status['browser_cache'] ? ' ' . __( 'The rules were removed again because the site did not answer after they were written.', 'shd-performance' ) : '' ),
+			'task'   => 'browser-cache',
+		);
+	}
+
+	/**
+	 * @param string $header Server header.
+	 * @return string The web server software, as far as the header tells.
+	 */
+	private static function server_name( $header ) {
+		foreach ( array( 'nginx' => 'nginx', 'apache' => 'Apache', 'litespeed' => 'LiteSpeed', 'cloudflare' => 'Cloudflare', 'openresty' => 'OpenResty (nginx)', 'caddy' => 'Caddy', 'microsoft-iis' => 'IIS' ) as $needle => $name ) {
+			if ( false !== strpos( $header, $needle ) ) {
+				return $name;
+			}
+		}
+		return '' !== $header ? sanitize_text_field( substr( $header, 0, 40 ) ) : __( 'not shown', 'shd-performance' );
+	}
+
+	private static function ga_result( array $response ) {
+		$body = $response['body'];
+		$ids  = array();
+		if ( preg_match( '/"v4_id"\s*:\s*"(G-[A-Z0-9]+)"/', $body, $m ) ) {
+			$ids['MonsterInsights'] = $m[1];
+		}
+		if ( preg_match( '/SHDTrackingConfig\s*=\s*\{.*?"ga4"\s*:\s*\{[^}]*"enabled"\s*:\s*true[^}]*"id"\s*:\s*"(G-[A-Z0-9]+)"/s', $body, $m ) ) {
+			$ids['SHD Tracking Manager'] = $m[1];
+		}
+		$duplicate = count( $ids ) > 1 && count( array_unique( $ids ) ) < count( $ids );
+		return array(
+			'label'  => __( 'Google Analytics 4 loaded once', 'shd-performance' ),
+			'status' => $duplicate ? 'warn' : 'good',
+			'value'  => $duplicate ? sprintf( '%s: %s', implode( ' + ', array_keys( $ids ) ), reset( $ids ) ) : __( 'no duplicate found', 'shd-performance' ),
+			'detail' => __( 'The same GA4 property configured by two plugins costs extra JavaScript and can count page views twice.', 'shd-performance' ),
+			'task'   => 'tracking-ga',
+		);
+	}
+
+	private static function php_result() {
+		$version = PHP_VERSION;
+		return array(
+			'label'  => __( 'PHP version', 'shd-performance' ),
+			'status' => version_compare( $version, '8.2', '>=' ) ? 'good' : ( version_compare( $version, '8.0', '>=' ) ? 'warn' : 'bad' ),
+			'value'  => $version,
+			'detail' => __( 'PHP 8.2 or newer is faster and still receives security updates.', 'shd-performance' ),
+			'task'   => 'server-ttfb',
+		);
+	}
+
+	private static function opcache_result() {
+		$enabled = false;
+		if ( function_exists( 'opcache_get_status' ) ) {
+			$status  = @opcache_get_status( false ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$enabled = is_array( $status ) && ! empty( $status['opcache_enabled'] );
+		}
+		return array(
+			'label'  => __( 'PHP OPcache', 'shd-performance' ),
+			'status' => $enabled ? 'good' : 'bad',
+			'value'  => $enabled ? __( 'enabled', 'shd-performance' ) : __( 'not enabled', 'shd-performance' ),
+			'detail' => __( 'Without OPcache, PHP recompiles WordPress on every request.', 'shd-performance' ),
+			'task'   => 'server-ttfb',
+		);
+	}
+
+	private static function autoload_result() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$bytes = (int) $wpdb->get_var( "SELECT SUM(LENGTH(option_value)) FROM {$wpdb->options} WHERE autoload IN ('yes','on','auto-on','auto')" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$top   = $wpdb->get_results( "SELECT option_name, LENGTH(option_value) AS size FROM {$wpdb->options} WHERE autoload IN ('yes','on','auto-on','auto') ORDER BY size DESC LIMIT 5", ARRAY_A );
+		$names = array();
+		foreach ( (array) $top as $row ) {
+			$names[] = $row['option_name'] . ' (' . size_format( (int) $row['size'] ) . ')';
+		}
+		return array(
+			'label'  => __( 'Autoloaded options', 'shd-performance' ),
+			'status' => $bytes < 800 * KB_IN_BYTES ? 'good' : ( $bytes < 2 * MB_IN_BYTES ? 'warn' : 'bad' ),
+			'value'  => size_format( $bytes ),
+			/* translators: %s: option names */
+			'detail' => sprintf( __( 'Loaded on every request. Largest: %s', 'shd-performance' ), implode( ', ', $names ) ),
+			'task'   => 'server-ttfb',
+		);
+	}
+
+	private static function debug_result() {
+		$savequeries = defined( 'SAVEQUERIES' ) && SAVEQUERIES;
+		$debug       = defined( 'WP_DEBUG' ) && WP_DEBUG;
+		return array(
+			'label'  => __( 'Debug settings', 'shd-performance' ),
+			'status' => $savequeries ? 'bad' : ( $debug ? 'warn' : 'good' ),
+			'value'  => $savequeries ? 'SAVEQUERIES' : ( $debug ? 'WP_DEBUG' : __( 'off', 'shd-performance' ) ),
+			'detail' => __( 'WP_DEBUG and especially SAVEQUERIES slow down every request on a live site.', 'shd-performance' ),
+			'task'   => 'server-ttfb',
+		);
+	}
+
+	private static function font_icons_result() {
+		$state  = get_option( 'elementor_experiment-e_font_icon_svg', 'default' );
+		$active = 'active' === $state;
+		return array(
+			'label'  => __( 'Elementor “Inline Font Icons”', 'shd-performance' ),
+			'status' => $active ? 'good' : 'warn',
+			'value'  => $active ? __( 'active', 'shd-performance' ) : (string) $state,
+			'detail' => __( 'Inline SVG icons remove the 4 Font Awesome stylesheets and about 170 KB of icon fonts.', 'shd-performance' ),
+			'task'   => 'font-icons',
+		);
+	}
+
+	private static function page_cache_result() {
+		$status = Page_Cache::status();
+		$labels = array(
+			'htaccess' => __( 'active, sent directly by the web server (.htaccess)', 'shd-performance' ),
+			'php'      => __( 'active, sent by advanced-cache.php before WordPress loads', 'shd-performance' ),
+			'plugin'   => __( 'active, but sent only after the plugins have loaded', 'shd-performance' ),
+		);
+		if ( 'active' === $status['state'] ) {
+			$value = isset( $labels[ $status['delivery'] ] ) ? $labels[ $status['delivery'] ] : __( 'active', 'shd-performance' );
+		} elseif ( 'blocked' === $status['state'] ) {
+			/* translators: %s: plugin name */
+			$value = sprintf( __( 'waiting: %s is still active', 'shd-performance' ), $status['blocker'] );
+		} elseif ( 'off' === $status['state'] ) {
+			$value = __( 'switched off', 'shd-performance' );
+		} else {
+			$value = __( 'not working', 'shd-performance' );
+		}
+		return array(
+			'label'  => __( 'SHD page cache', 'shd-performance' ),
+			'status' => 'active' === $status['state'] ? ( 'plugin' === $status['delivery'] ? 'warn' : 'good' ) : ( 'error' === $status['state'] || 'unsupported' === $status['state'] ? 'bad' : 'warn' ),
+			'value'  => $value,
+			'detail' => implode( ' ', array_merge( array( __( 'Stores every page as a file and sends it without starting WordPress.', 'shd-performance' ) ), (array) $status['notes'] ) ),
+			'task'   => 'page-cache',
+		);
+	}
+
+	private static function redirect_result() {
+		$domains = array_filter( array_map( 'trim', (array) Settings::get()['redirect_domains'] ) );
+		$home    = home_url( '/' );
+		$lines   = array();
+		$worst   = 'good';
+		foreach ( $domains as $domain ) {
+			$url  = 'https://' . preg_replace( '#^https?://#', '', rtrim( $domain, '/' ) ) . '/';
+			$hops = 0;
+			for ( $i = 0; $i < 5; $i++ ) {
+				$response = wp_remote_head( $url, array( 'redirection' => 0, 'timeout' => 15 ) );
+				if ( is_wp_error( $response ) ) {
+					$lines[] = $domain . ': ' . $response->get_error_message();
+					$worst   = 'warn';
+					continue 2;
+				}
+				$location = wp_remote_retrieve_header( $response, 'location' );
+				if ( ! $location ) {
+					break;
+				}
+				++$hops;
+				$url = \WP_Http::make_absolute_url( $location, $url );
+			}
+			$arrived = untrailingslashit( $url ) === untrailingslashit( $home );
+			/* translators: 1: domain, 2: hops */
+			$lines[] = sprintf( _n( '%1$s: %2$d redirect', '%1$s: %2$d redirects', $hops, 'shd-performance' ), $domain, $hops ) . ( $arrived ? '' : ' → ' . $url );
+			if ( $hops > 1 || ! $arrived ) {
+				$worst = 'warn';
+			}
+		}
+		return array(
+			'label'  => __( 'Old domains redirect in one step', 'shd-performance' ),
+			'status' => empty( $domains ) ? 'info' : $worst,
+			'value'  => empty( $domains ) ? __( 'no domains configured', 'shd-performance' ) : implode( ' · ', $lines ),
+			'detail' => __( 'Each extra redirect costs a full connection setup before the page starts loading.', 'shd-performance' ),
+			'task'   => 'redirects',
+		);
+	}
+
+	private static function robots_result() {
+		$response = wp_remote_get( home_url( '/robots.txt' ), array( 'timeout' => 15, 'sslverify' => apply_filters( 'https_local_ssl_verify', false ) ) );
+		$body     = is_wp_error( $response ) ? '' : (string) wp_remote_retrieve_body( $response );
+		$host     = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$foreign  = array();
+		if ( preg_match_all( '/^\s*sitemap:\s*(\S+)/im', $body, $m ) ) {
+			foreach ( $m[1] as $url ) {
+				if ( strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) ) !== $host ) {
+					$foreign[] = $url;
+				}
+			}
+		}
+		return array(
+			'label'  => __( 'robots.txt sitemap lines', 'shd-performance' ),
+			'status' => empty( $foreign ) ? 'good' : 'warn',
+			'value'  => empty( $foreign ) ? __( 'all point to this domain', 'shd-performance' ) : implode( ', ', $foreign ),
+			'detail' => __( 'Sitemap lines should use the canonical domain only.', 'shd-performance' ),
+			'task'   => 'robots',
+		);
+	}
+}
