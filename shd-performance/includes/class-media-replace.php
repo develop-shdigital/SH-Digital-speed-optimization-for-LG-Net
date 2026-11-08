@@ -149,7 +149,7 @@ final class Media_Replace {
 		if ( ! file_exists( $dir . '/index.php' ) ) {
 			file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
-		$key  = (int) $id . '-q' . (int) $quality . '-' . substr( md5( $source . '|' . filemtime( $source ) . '|' . filesize( $source ) ), 0, 10 );
+		$key  = (int) $id . '-q' . (int) $quality . '-' . substr( md5( $source . '|' . filemtime( $source ) . '|' . filesize( $source ) . '|' . SHD_PERF_VERSION ), 0, 10 );
 		$path = $dir . '/' . $key . '.webp';
 		if ( ! is_file( $path ) ) {
 			$made = self::encode_webp( $source, $path, $quality );
@@ -200,6 +200,30 @@ final class Media_Replace {
 	 * @param int    $quality Quality.
 	 * @return array|\WP_Error Saved file data.
 	 */
+	/**
+	 * Runs $callback with WordPress's image quality fixed to $quality. When an editor saves in
+	 * another format (PNG or JPEG as WebP), WordPress resets the quality to its default for the
+	 * new type (WP_Image_Editor::get_output_format()), so set_quality() alone had no effect and
+	 * every quality offered on the Images tab gave the same file. Image sizes are made at the
+	 * default quality too unless it is fixed here.
+	 *
+	 * @param int      $quality  1-100.
+	 * @param callable $callback Work to do.
+	 * @return mixed What $callback returns.
+	 */
+	private static function with_quality( $quality, callable $callback ) {
+		$quality = max( 1, min( 100, (int) $quality ) );
+		$force   = static function () use ( $quality ) {
+			return $quality;
+		};
+		add_filter( 'wp_editor_set_quality', $force, PHP_INT_MAX );
+		try {
+			return $callback();
+		} finally {
+			remove_filter( 'wp_editor_set_quality', $force, PHP_INT_MAX );
+		}
+	}
+
 	private static function encode_webp( $source, $target, $quality ) {
 		wp_raise_memory_limit( 'image' );
 		$temp = '';
@@ -225,7 +249,12 @@ final class Media_Replace {
 			return $editor;
 		}
 		$editor->set_quality( max( 1, min( 100, (int) $quality ) ) );
-		$saved = $editor->save( $target, 'image/webp' );
+		$saved = self::with_quality(
+			$quality,
+			static function () use ( $editor, $target ) {
+				return $editor->save( $target, 'image/webp' );
+			}
+		);
 		if ( '' !== $temp ) {
 			wp_delete_file( $temp );
 		}
@@ -320,7 +349,15 @@ final class Media_Replace {
 		update_attached_file( $id, $new_path );
 		$wpdb->update( $wpdb->posts, array( 'post_mime_type' => $type['type'] ), array( 'ID' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		clean_post_cache( $id );
-		$new_meta = wp_generate_attachment_metadata( $id, $new_path );
+		// The sizes the pages load (768 px on phones) get the chosen quality as well.
+		$new_meta = $quality > 0
+			? self::with_quality(
+				$quality,
+				static function () use ( $id, $new_path ) {
+					return wp_generate_attachment_metadata( $id, $new_path );
+				}
+			)
+			: wp_generate_attachment_metadata( $id, $new_path );
 		if ( ! is_array( $new_meta ) || empty( $new_meta['file'] ) ) {
 			// Put everything back as it was.
 			$made = self::files( $new_meta, (string) get_post_meta( $id, '_wp_attached_file', true ) );
