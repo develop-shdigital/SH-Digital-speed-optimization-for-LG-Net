@@ -50,7 +50,20 @@ locally. Lighthouse uses PageSpeed Insights' settings; compare before/after on t
   after every script that ran before it. Compare observed and simulated values (`metrics`
   audit) before concluding that a change did nothing.
 - Third-party hosts are unreachable in the replay: their cost (an accessibility widget, Google
-  Fonts) only shows on PageSpeed Insights.
+  Fonts) only shows on PageSpeed Insights. For layout comparisons this matters too: an original
+  page that links Google Fonts renders in its fallback font in the replay, while the optimized
+  page (fonts copied to the site) renders in the real font. Compare against a copy of the
+  original that links the same local font files.
+- Lantern shares the bandwidth evenly between parallel downloads, whatever their priority:
+  once scripts no longer hold the parser up, every image discovered with the page competes
+  with the main image (on LGnet's /ratgeber/ six post-card images, phone LCP 2.6 → 3.2 s).
+  Images below the first screen need `loading="lazy"`.
+- Images that come from a srcset file the original page never requested are fetched from the
+  live site; a 503 there leaves the image empty in the lab (the replay logs `UPSTREAM 503`).
+- Font fallbacks: check line breaks, not only average widths. `browser/font-swap.cjs` lists the
+  texts that change size when the web fonts arrive; `browser/font-fit.cjs` finds, per family
+  (and weight), the `size-adjust` at which the fewest texts break into a different number of
+  lines. Headings with a `max-width` in `ch` follow the digit width, which Arial Bold gets wrong.
 
 ## Local WordPress — `local-wp/`
 

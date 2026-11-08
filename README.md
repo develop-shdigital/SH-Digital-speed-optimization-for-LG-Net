@@ -128,7 +128,62 @@ addresses, Hostpoint redirects) and verification in PageSpeed Insights and with 
 
 ## Results
 
-RESULTS_PLACEHOLDER
+Lab measurements, November 2026: Lighthouse 13.6 (the engine of PageSpeed Insights, with its
+simulated mid-range phone on slow 4G and its desktop) on a local replay of the live pages, three
+phone runs and one desktop run per page and version. Scores as ranges, LCP as averages.
+
+- **before:** the pages as the site sends them now;
+- **Live:** SHD Performance 1.6.0 with its defaults;
+- **all:** also with the three Test features switched to Live (JavaScript deferred or started on
+  the first interaction, jQuery Migrate removed), as the checklist proposes once the Test view has
+  been checked.
+
+| Page | Phone before | Phone, Live | Phone, all | Phone LCP: before / Live / all | Desktop before | Desktop, Live | Desktop, all |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Homepage | 91–93 | 93–97 | 99–100 | 2.5 s / 2.4 s / 1.8 s | 99 | 99 | 100 |
+| /mobile/ | 76–84 | 91–93 | 99–100 | 4.1 s / 1.5 s / 1.1 s | 100 | 100 | 100 |
+| /tv/ | 77–86 | 86–89 | 99–100 | 4.0 s / 3.6 s / 1.8 s | 99 | 100 | 100 |
+| /internet/ | 81–83 | 83–89 | 98–99 | 3.8 s / 3.3 s / 1.9 s | 99 | 100 | 100 |
+| /kontakt/ | 97 | 97–98 | 100 | 2.3 s / 2.2 s / 1.5 s | 100 | 100 | 100 |
+| /shop/ | 90–94 | 91–94 | 98–99 | 3.1 s / 3.1 s / 2.3 s | 99 | 99 | 100 |
+| /ratgeber/ | 95–97 | 94–96 | 99 | 2.6 s / 2.7 s / 2.0 s | 100 | 100 | 100 |
+| /telefonanbieter-schweiz/ | 74–83 | 72–75 | 86 | 4.9 s / 4.9 s / 4.1 s | 89 | 90 | 91 |
+| /en/ | 92–94 | 96–97 | 99–100 | 2.5 s / 2.2 s / 1.6 s | 98 | 99 | 100 |
+
+Largest layout shift in any run: before 0.094, Live 0.018, all 0.018. Total Blocking Time on
+phones: before 82–379 ms, Live 92–399 ms, all 1–126 ms.
+
+- **95+ on phones needs the Test features.** With the Live defaults the homepage, /mobile/ and
+  /en/ gain most. On /tv/ and /internet/ the cookie banner's text stays the largest element, and
+  Cookiez can only draw it after jQuery and Elementor's scripts. With the Test features switched
+  to Live, every measured page but one scores 98–100 on phones and 100 on computers.
+- **/telefonanbieter-schweiz/ needs its image replaced** (86 on phones with all features): the
+  article's main image is the 1.9 MB PNG, 436 KB at phone size. Replacing it with WebP
+  (SHD Performance → Images, a checklist task) removes most of that download. With the Live
+  defaults alone this page stays where it was; its run-to-run differences come from jQuery Migrate
+  and Elementor Pro's scripts, which only the Test features change.
+- **Not in these numbers:** the replay answers at once, so the 0.8–1.8 s the server needs to build
+  a page today are left out of every version. The page cache removes most of that time on the
+  live site, so the real gain is larger than the table shows.
+- **Nothing visible changes.** After loading and scrolling, the optimized pages are identical to
+  the originals on 15 pages, phone and desktop, with the Live defaults (every heading, paragraph,
+  image, list item and button within 1 px, every image loaded, no new script errors), and on the
+  8 pages also checked with all features. The pages with Work Sans were compared with originals
+  that load the same font files (the replay blocks Google Fonts). The fixture test passes on all
+  29 saved pages. While the web fonts load, the text uses fallbacks tuned on the site's own texts:
+  elements in the first two screens that change size when the fonts arrive went from 41 to 0 on
+  /internet/, 30 to 2 on /ratgeber/, 9 to 0 on /kontakt/ and 57 to 0 on /en/ (phones).
+
+**On the live site** (after installing, and again after switching the Test features to Live):
+PageSpeed Insights for the
+[homepage](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2F),
+[/mobile/](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2Fmobile%2F),
+[/tv/](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2Ftv%2F),
+[/internet/](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2Finternet%2F),
+[/ratgeber/](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2Fratgeber%2F)
+and [/telefonanbieter-schweiz/](https://pagespeed.web.dev/analysis?url=https%3A%2F%2Flgnet-wordpress.shdigital.ch%2Ftelefonanbieter-schweiz%2F),
+a few minutes after activating, when SHD Performance → Page cache shows the pages as stored. Real visitors: SHD Performance → Web Vitals
+after a few days (75th percentile, phones and computers separately).
 
 ## Development
 
