@@ -13,6 +13,7 @@ project (SHD Performance 1.5.2, its lab and its handoff), adapted to this site.
 | `tests/optimize-fixtures.php` | Runs the optimizer over saved pages and checks that nothing visible or functional was lost. |
 | `tools/perf-lab/` | Measurement and test lab: PageSpeed results, Chrome DevTools audits, a local replay of the live site, Lighthouse runs, a local WordPress. See its README. |
 | `.claude/skills/web-perf/` | The Chrome DevTools performance skill (falls back to `tools/perf-lab/devtools/audit.mjs` when the MCP server is not connected). |
+| `.claude/skills/ponytail*/`, `CLAUDE.md` | Ponytail coding skills (v5.3.3), switched on for every session; see [Ponytail](#ponytail-coding-skills). |
 | `.mcp.json` | The Chrome DevTools MCP server for the skill, pinned to 1.12.0, headless. |
 
 ## What slowed the site down (November 2026)
@@ -209,6 +210,17 @@ Rules carried over from the original project: tests never send analytics hits, c
 form posts to live services (the replay blocks every other host and answers REST and non-GET
 requests locally); live measurements only with PageSpeed Insights and curl; no tracking IDs, API
 keys, font files or saved site HTML in the repository.
+
+### Ponytail (coding skills)
+
+`.claude/skills/ponytail*` are the six skills of [Ponytail](https://github.com/DietrichGebert/ponytail)
+(MIT), copied unchanged from release v5.3.3 (commit `7801d06`) after reading them: coding rules
+(the smallest complete change, reuse before writing, never cut validation, security or tests) and
+review, audit, debt and gain reports. `CLAUDE.md` switches them on for every session in this
+repository. Only the skills are installed, not Ponytail's Claude Code plugin: its hooks add a file
+list of the repository to every session and write a cost and token ledger after every turn. To
+update, review a newer release and copy its `skills/` folders; to switch off, remove the section
+in `CLAUDE.md`.
 
 ### Claude Code memory (claude-mem)
 
