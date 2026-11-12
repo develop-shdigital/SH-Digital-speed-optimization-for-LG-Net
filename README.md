@@ -226,7 +226,8 @@ in `CLAUDE.md`.
 ### Graphify (knowledge graph of the code)
 
 [Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0) turns the repository into a
-queryable knowledge graph in `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`, `graph.html`). Its
+queryable knowledge graph in `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`; `graphify export html`
+draws `graph.html` from it). Its
 skill (`.claude/skills/graphify/`), the rules in `CLAUDE.md` (query the graph before searching code,
 `graphify update .` after code changes) and its hooks in `.claude/settings.json` (a reminder before
 searches and file reads) come from `graphify install --project` of version 0.9.107, read before
