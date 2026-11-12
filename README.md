@@ -14,6 +14,7 @@ project (SHD Performance 1.5.2, its lab and its handoff), adapted to this site.
 | `tools/perf-lab/` | Measurement and test lab: PageSpeed results, Chrome DevTools audits, a local replay of the live site, Lighthouse runs, a local WordPress. See its README. |
 | `.claude/skills/web-perf/` | The Chrome DevTools performance skill (falls back to `tools/perf-lab/devtools/audit.mjs` when the MCP server is not connected). |
 | `.claude/skills/ponytail*/`, `CLAUDE.md` | Ponytail coding skills (v5.3.3), switched on for every session; see [Ponytail](#ponytail-coding-skills). |
+| `.claude/skills/graphify/`, `graphify-out/` | Graphify skill (0.9.107) and the knowledge graph of this repository; see [Graphify](#graphify-knowledge-graph-of-the-code). |
 | `.mcp.json` | The Chrome DevTools MCP server for the skill, pinned to 1.12.0, headless. |
 
 ## What slowed the site down (November 2026)
@@ -221,6 +222,26 @@ repository. Only the skills are installed, not Ponytail's Claude Code plugin: it
 list of the repository to every session and write a cost and token ledger after every turn. To
 update, review a newer release and copy its `skills/` folders; to switch off, remove the section
 in `CLAUDE.md`.
+
+### Graphify (knowledge graph of the code)
+
+[Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0) turns the repository into a
+queryable knowledge graph in `graphify-out/` (`graph.json`, `GRAPH_REPORT.md`, `graph.html`). Its
+skill (`.claude/skills/graphify/`), the rules in `CLAUDE.md` (query the graph before searching code,
+`graphify update .` after code changes) and its hooks in `.claude/settings.json` (a reminder before
+searches and file reads) come from `graphify install --project` of version 0.9.107, read before
+installing. `.graphifyignore` keeps the Claude setup, the bundled web-vitals library and the minified
+script copies out of the graph. Code is read structurally without any AI; the docs are read by
+Claude itself (subagents), so no API key is needed.
+
+Every machine that runs Claude Code on this repository needs the command-line tool, otherwise its
+hooks report "graphify: command not found" before each search or file read:
+
+```bash
+uv tool install graphifyy==0.9.107
+```
+
+In Claude Code on the web, put that line in the environment's setup script.
 
 ### Claude Code memory (claude-mem)
 

@@ -1,0 +1,7 @@
+# Claude Code setup and skill instructions: not part of the project.
+.claude/
+CLAUDE.md
+.mcp.json
+# Third-party library and the minified copies of the plugin's own scripts.
+shd-performance/assets/js/vendor/
+shd-performance/assets/js/min/
