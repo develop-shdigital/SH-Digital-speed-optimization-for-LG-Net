@@ -2490,6 +2490,13 @@ final class Html_Optimizer {
 		} else {
 			return $html;
 		}
+		// After the viewport tag when it comes first: before it, phones match media queries against a
+		// 980 px wide page, so they fetched the desktop image's preload and skipped their own.
+		$end = (int) stripos( $html, '</head>' );
+		if ( preg_match( '/<meta\s[^>]*name=["\']?viewport["\']?[^>]*>/i', $html, $v, PREG_OFFSET_CAPTURE, $at ) && $v[0][1] < $end
+			&& ! preg_match( '/<(?:link|script|style)\b/i', substr( $html, $at, $v[0][1] - $at ) ) ) {
+			$at = $v[0][1] + strlen( $v[0][0] );
+		}
 		return substr( $html, 0, $at ) . "\n" . $tags . substr( $html, $at );
 	}
 

@@ -4,7 +4,7 @@ Tags: performance, core web vitals, elementor, pagespeed
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,6 +77,9 @@ SHD Performance → Images (or "Replace file" in the Media Library). Choose "Use
 No. Each page view may send one anonymous beacon with the metric values, the page path and whether the screen is phone-sized. No IP address, user agent or identifier is stored. Data older than 90 days is deleted. Automated browsers (tests, and PageSpeed Insights' lab runs) send nothing, so the numbers come from real visits only.
 
 == Changelog ==
+
+= 1.6.1 =
+* Fixed: the tags the plugin adds to the head (main-image preloads, font fallbacks, the delayed-script loader) now come after the viewport tag. Before it, phones match media queries against a 980 px wide page, so on a page with separate main-image preloads for phones and computers they downloaded the computer's image and skipped their own (egligartenbau.com: phone scores 85–87 → 98). LGnet's pages had no such preloads yet. The fixture test checks the order.
 
 = 1.6.0 =
 * Adapted to the LGnet site (lgnet-wordpress.shdigital.ch), based on SHD Performance 1.5.2 of sh-digital.ch.

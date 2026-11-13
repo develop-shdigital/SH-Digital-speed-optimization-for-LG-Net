@@ -1,7 +1,7 @@
-# Graph Report - SH-Digital-speed-optimization-for-LG-Net  (2026-11-12)
+# Graph Report - sh-digital-speed-optimization-for-lg-net  (2026-11-13)
 
 ## Corpus Check
-- 61 files · ~102,714 words
+- 60 files · ~103,094 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 3 file(s) not represented in the graph (top: (none) 2, .css 1)
 
@@ -9,6 +9,11 @@
 - 841 nodes · 1913 edges · 32 communities (16 shown, 16 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 105 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `61d171cb`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - HTML optimizer and lazy loading
@@ -138,7 +143,7 @@ Cohesion: 0.70
 Nodes (4): loadApi(), needsApi(), parse(), play()
 
 ## Knowledge Gaps
-- **5 isolated node(s):** `LGnet site (WordPress + Elementor)`, `Ally accessibility widget loaded async`, `Ponytail coding skills (v5.3.3)`, `Graphify knowledge graph (0.9.107)`, `claude-mem plugin (v15.9.0)`
+- **5 isolated node(s):** `claude-mem plugin (v15.9.0)`, `Graphify knowledge graph (0.9.107)`, `LGnet site (WordPress + Elementor)`, `Ponytail coding skills (v5.3.3)`, `Ally accessibility widget loaded async`
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 145 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -149,7 +154,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.231) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `Html_Optimizer` (e.g. with `Link names and logo alt text in the page language` and `Image placeholders despite aspect-ratio: unset`) actually correct?**
   _`Html_Optimizer` has 8 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `LGnet site (WordPress + Elementor)`, `Ally accessibility widget loaded async`, `Ponytail coding skills (v5.3.3)` to the rest of the system?**
+- **What connects `claude-mem plugin (v15.9.0)`, `Graphify knowledge graph (0.9.107)`, `LGnet site (WordPress + Elementor)` to the rest of the system?**
   _5 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `HTML optimizer and lazy loading` be split into smaller, more focused modules?**
   _Cohesion score 0.056334735857877516 - nodes in this community are weakly interconnected._

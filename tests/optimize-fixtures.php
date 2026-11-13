@@ -268,6 +268,11 @@ foreach ( $files as $file ) {
 			$first[ $template ] = true;
 		}
 	}
+	// Preloads for one screen size come after the viewport tag (before it, phones match them as 980 px).
+	$viewport = stripos( $result, '<meta name="viewport"' );
+	if ( false !== $viewport && preg_match( '#<link rel="preload"[^>]*\smedia=#i', $result, $media, PREG_OFFSET_CAPTURE ) && $media[0][1] < $viewport ) {
+		$problems[] = 'screen-size preload before the viewport tag';
+	}
 	// Google Fonts: connection hints only go when no Google stylesheet is left.
 	if ( preg_match( '#<link\b[^>]*href="(?:https?:)?//fonts\.googleapis\.com/css#i', $result ) && substr_count( $html, 'fonts.gstatic.com' ) !== substr_count( $result, 'fonts.gstatic.com' ) ) {
 		$problems[] = 'Google Fonts preconnect removed while Google Fonts are still linked';
